@@ -18,7 +18,7 @@ import type { Route } from "./+types/login";
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Login - TicketDesk" },
-    { name: "description", content: "Sign in to your account" },
+    { name: "description", content: "Sign in to your TicketDesk account" },
   ];
 }
 
@@ -37,47 +37,59 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    console.log("🚀 Starting login for:", formData.email);
-
     try {
-      const { data: authData, error: authError } =
+      const { data, error: signInError } =
         await supabase.auth.signInWithPassword({
           email: formData.email,
           password: formData.password,
         });
 
-      if (authError) {
-        console.error("❌ Login error:", authError);
-        setError(authError.message);
-        return;
+      if (signInError) {
+        throw signInError;
       }
 
-      if (!authData.session) {
-        setError("Failed to establish session");
-        return;
+      if (!data.user) {
+        throw new Error("Login failed");
       }
 
-      console.log("✅ Login successful for:", authData.user.email);
-      console.log("🍪 Session stored in cookies");
-
-      // The session is now automatically stored in cookies by the Supabase client
-      // Refresh the auth context and redirect
       await refreshSession();
-      console.log("🎉 Redirecting to dashboard...");
-      navigate("/dashboard");
-    } catch (error) {
-      console.error("❌ Login exception:", error);
-      setError(error instanceof Error ? error.message : "An error occurred");
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role, name")
+        .eq("id", data.user.id)
+        .single();
+
+      if (profileError) {
+        console.error("Profile fetch error:", profileError);
+        navigate("/");
+        return;
+      }
+
+      switch (profile.role) {
+        case "admin":
+          navigate("/"); // Admins go to dashboard with full overview
+          break;
+        case "agent":
+          navigate("/tickets"); // Agents go directly to tickets they can handle
+          break;
+        case "user":
+        default:
+          navigate("/tickets"); // Users go to tickets (their own tickets)
+          break;
+      }
+    } catch (err: any) {
+      console.error("Login error:", err);
+      setError(err.message || "An error occurred during login");
     } finally {
       setLoading(false);
     }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (error) setError("");
   };
 
   return (
@@ -87,7 +99,9 @@ export default function LoginPage() {
           <div className="w-full max-w-md">
             <Card>
               <CardHeader className="text-center">
-                <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
+                <CardTitle className="text-2xl font-bold">
+                  Welcome back
+                </CardTitle>
                 <CardDescription>
                   Sign in to your account to continue
                 </CardDescription>
@@ -112,6 +126,7 @@ export default function LoginPage() {
                       value={formData.email}
                       onChange={handleChange}
                       placeholder="Enter your email"
+                      required
                     />
                   </div>
 
@@ -126,14 +141,11 @@ export default function LoginPage() {
                       value={formData.password}
                       onChange={handleChange}
                       placeholder="Enter your password"
+                      required
                     />
                   </div>
 
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={loading}
-                  >
+                  <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Signing in..." : "Sign in"}
                   </Button>
                 </form>

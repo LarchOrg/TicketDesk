@@ -73,6 +73,27 @@ export function createSupabaseServerClient(request: Request) {
   return { supabase, response };
 }
 
+export async function getSupabaseUser(request: Request) {
+  const { supabase } = createSupabaseServerClient(request);
+
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      console.error("❌ Server user error:", error);
+      return null;
+    }
+
+    return user;
+  } catch (error) {
+    console.error("❌ Server user exception:", error);
+    return null;
+  }
+}
+
 export async function getSupabaseSession(request: Request) {
   const { supabase } = createSupabaseServerClient(request);
 
@@ -94,15 +115,10 @@ export async function getSupabaseSession(request: Request) {
   }
 }
 
-export async function getSupabaseUser(request: Request) {
-  const session = await getSupabaseSession(request);
-  return session?.user || null;
-}
-
 export async function requireAuth(request: Request) {
-  const session = await getSupabaseSession(request);
+  const user = await getSupabaseUser(request);
 
-  if (!session) {
+  if (!user) {
     throw new Response("Unauthorized", {
       status: 401,
       headers: {
@@ -111,5 +127,5 @@ export async function requireAuth(request: Request) {
     });
   }
 
-  return session;
+  return user;
 }

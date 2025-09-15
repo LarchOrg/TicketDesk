@@ -1,8 +1,7 @@
-import { AlertCircle, Plus, Upload, X } from "lucide-react";
+import { AlertCircle, Upload, X } from "lucide-react";
 import React, { useState } from "react";
 import type { FormState, TicketFormData } from "~/lib/types";
 import { RichTextEditor } from "./RichTextEditor";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
@@ -15,11 +14,20 @@ import {
   SelectValue,
 } from "./ui/select";
 
+interface AssignableUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
 interface TicketFormProps {
   onSubmit: (data: TicketFormData) => Promise<void>;
   initialData?: Partial<TicketFormData>;
   isEditing?: boolean;
   className?: string;
+  assignableUsers?: AssignableUser[];
+  isSubmitting?: boolean;
 }
 
 export default function TicketForm({
@@ -27,12 +35,17 @@ export default function TicketForm({
   initialData,
   isEditing = false,
   className = "",
-}: TicketFormProps) {
+  assignableUsers = [],
+  isSubmitting = false,
+}: TicketFormProps): React.ReactElement {
   const [formData, setFormData] = useState<TicketFormData>({
     title: initialData?.title || "",
     description: initialData?.description || "",
     priority: initialData?.priority || "medium",
-    assigned_to: initialData?.assigned_to || "",
+    assigned_to:
+      initialData?.assigned_to && initialData.assigned_to.trim() !== ""
+        ? initialData.assigned_to
+        : "unassigned",
     attachments: [],
   });
 
@@ -42,8 +55,6 @@ export default function TicketForm({
     error: undefined,
     success: false,
   });
-  // const [tags, setTags] = useState<string[]>(initialData?.tags || []);
-  // const [newTag, setNewTag] = useState("");
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFiles = Array.from(event.target.files || []);
@@ -62,21 +73,6 @@ export default function TicketForm({
     }));
   };
 
-  // const addTag = () => {
-  //   if (newTag.trim() && !tags.includes(newTag.trim())) {
-  //     const updatedTags = [...tags, newTag.trim()];
-  //     setTags(updatedTags);
-  //     setFormData((prev) => ({ ...prev, tags: updatedTags }));
-  //     setNewTag("");
-  //   }
-  // };
-
-  // const removeTag = (tagToRemove: string) => {
-  //   const updatedTags = tags.filter((tag) => tag !== tagToRemove);
-  //   setTags(updatedTags);
-  //   setFormData((prev) => ({ ...prev, tags: updatedTags }));
-  // };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -92,27 +88,16 @@ export default function TicketForm({
 
     try {
       await onSubmit(formData);
-      setFormState((prev) => ({ ...prev, isSubmitting: false, success: true }));
-
-      if (!isEditing) {
-        // Reset form for new tickets
-        setFormData({
-          title: "",
-          description: "",
-          priority: "medium",
-          category_id: "",
-          assigned_to: "",
-          tags: [],
-          attachments: [],
-        });
-        // setTags([]);
-        setFiles([]);
-      }
+      // Don't set success state here - let the parent component handle navigation
+      // The success state was causing confusion when server errors occurred
     } catch (error) {
       setFormState((prev) => ({
         ...prev,
         isSubmitting: false,
-        error: error instanceof Error ? error.message : "An error occurred",
+        error:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred",
       }));
     }
   };
@@ -161,7 +146,7 @@ export default function TicketForm({
             />
           </div>
 
-          {/* Priority and Category Row */}
+          {/* Priority and Assignee Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="priority">Priority</Label>
@@ -183,53 +168,58 @@ export default function TicketForm({
               </Select>
             </div>
 
-            {/* <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
+            {/* Assigned To */}
+            <div className="space-y-2">
+              <Label htmlFor="assigned_to">Assign To</Label>
               <Select
-                value={formData.category_id || "none"}
+                value={formData.assigned_to || "unassigned"}
                 onValueChange={(value: any) =>
                   setFormData((prev) => ({
                     ...prev,
-                    category_id: value === "none" ? "" : value
+                    assigned_to: value === "unassigned" ? "" : value,
                   }))
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
+                  <SelectValue placeholder="Select assignee (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No Category</SelectItem>
-                  <SelectItem value="bug">Bug Report</SelectItem>
-                  <SelectItem value="feature">Feature Request</SelectItem>
-                  <SelectItem value="support">Support</SelectItem>
-                  <SelectItem value="question">Question</SelectItem>
+                  <SelectItem value="unassigned">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
+                        <span className="text-xs text-gray-600">?</span>
+                      </div>
+                      <span>Unassigned</span>
+                    </div>
+                  </SelectItem>
+                  {assignableUsers.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
+                          <span className="text-xs text-white font-medium">
+                            {user.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{user.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {user.role} • {user.email}
+                          </span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-            </div> */}
-          </div>
-
-          {/* Assigned To */}
-          <div className="space-y-2">
-            <Label htmlFor="assigned_to">Assign To</Label>
-            <Select
-              value={formData.assigned_to || "unassigned"}
-              onValueChange={(value: any) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  assigned_to: value === "unassigned" ? "" : value
-                }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select assignee (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="support">Support Team</SelectItem>
-                <SelectItem value="developer">Developer</SelectItem>
-              </SelectContent>
-            </Select>
+              {assignableUsers.length === 0 && (
+                <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    No assignable users available. Make sure you have users with
+                    'admin' or 'agent' roles.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Description */}
@@ -244,48 +234,6 @@ export default function TicketForm({
               className="min-h-[200px]"
             />
           </div>
-
-          {/* Tags */}
-          {/* <div className="space-y-2">
-            <Label>Tags</Label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {tags.map((tag, index) => (
-                <Badge
-                  key={index}
-                  variant="secondary"
-                  className="flex items-center space-x-1"
-                >
-                  <span>{tag}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeTag(tag)}
-                    className="ml-1 hover:text-red-500"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-            <div className="flex space-x-2">
-              <Input
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                placeholder="Add a tag"
-                onKeyDown={(e) =>
-                  e.key === "Enter" && (e.preventDefault(), addTag())
-                }
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                onClick={addTag}
-                variant="outline"
-                size="sm"
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
-          </div> */}
 
           {/* File Attachments */}
           <div className="space-y-2">
@@ -341,10 +289,10 @@ export default function TicketForm({
             </Button>
             <Button
               type="submit"
-              disabled={formState.isSubmitting}
+              disabled={formState.isSubmitting || isSubmitting}
               className="min-w-[120px]"
             >
-              {formState.isSubmitting ? (
+              {formState.isSubmitting || isSubmitting ? (
                 <div className="flex items-center space-x-2">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   <span>Saving...</span>

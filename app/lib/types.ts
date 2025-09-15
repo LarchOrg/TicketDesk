@@ -8,9 +8,9 @@ export interface Ticket {
   status: TicketStatus;
   priority: TicketPriority;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
   created_by: string;
-  assigned_to?: string;
+  assigned_to?: string | null;
   creator_name?: string;
   creator_email?: string;
   assignee_name?: string;
@@ -20,16 +20,19 @@ export interface Ticket {
   tags?: string[];
   attachments?: Attachment[];
   comments?: Comment[];
+  // Profile relationships from joins
+  created_by_profile?: Profile;
+  assigned_to_profile?: Profile;
 }
 
 export interface Profile {
   id: string;
-  name: string;
+  name?: string;
   email: string;
   avatar_url?: string;
   role?: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export interface Category {
@@ -56,9 +59,15 @@ export interface Comment {
   id: string;
   ticket_id: string;
   content: string;
-  created_by: string;
+  user_id: string;
+  comment_type?: string;
+  is_internal?: boolean;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
+  // Profile relationship from joins
+  author?: Profile;
+  // Legacy fields for backward compatibility
+  created_by?: string;
   creator_name?: string;
   creator_email?: string;
 }

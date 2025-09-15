@@ -9,17 +9,22 @@ import {
   Plus,
   Search,
   Settings,
+  Shield,
   Sun,
   User,
+  Users,
 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuth } from "~/auth";
+import {
+  getRoleColor,
+  getRoleDisplayName,
+  useRolePermissions,
+} from "~/lib/role-utils";
 import { Button } from "./ui/button";
 
 interface NavbarProps {
-  title?: string;
-  subtitle?: string;
   showSearch?: boolean;
   onSearch?: (query: string) => void;
   onFilter?: () => void;
@@ -31,8 +36,6 @@ interface NavbarProps {
 }
 
 export function Navbar({
-  title = "Dashboard",
-  subtitle,
   showSearch = true,
   onSearch,
   onFilter,
@@ -43,6 +46,7 @@ export function Navbar({
   onToggleSidebar,
 }: NavbarProps) {
   const { user, profile, signOut, loading } = useAuth();
+  const permissions = useRolePermissions();
   const [signingOut, setSigningOut] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const navigate = useNavigate();
@@ -77,51 +81,44 @@ export function Navbar({
   }
 
   return (
-    <nav className="bg-card border-b border-border shadow-sm sticky top-0 z-50">
+    <nav className="bg-card border-b border-border shadow-sm sticky top-0 z-30">
       <div className="px-6 py-4">
-        <div className="flex items-center justify-between">
-          {/* Left side - Sidebar Toggle and Title */}
+        <div className="flex justify-between items-center">
+          {/* Left Section */}
           <div className="flex items-center space-x-4">
-            {/* Sidebar Toggle Button */}
-            <Button
-              onClick={onToggleSidebar}
-              variant="ghost"
-              size="sm"
-              className="p-2.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-transparent hover:border-border"
-              title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-            >
-              {sidebarOpen ? (
-                <PanelLeftClose className="w-5 h-5" />
-              ) : (
-                <PanelLeftOpen className="w-5 h-5" />
-              )}
-            </Button>
-
-            {/* Title and Subtitle */}
-            <div>
-              <h1 className="text-xl font-bold text-foreground">{title}</h1>
-              {subtitle && (
-                <p className="text-sm text-muted-foreground">{subtitle}</p>
-              )}
-            </div>
+            {/* Sidebar Toggle */}
+            {onToggleSidebar && (
+              <Button
+                onClick={onToggleSidebar}
+                variant="ghost"
+                size="sm"
+                className="p-2.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {sidebarOpen ? (
+                  <PanelLeftClose className="w-4 h-4" />
+                ) : (
+                  <PanelLeftOpen className="w-4 h-4" />
+                )}
+              </Button>
+            )}
           </div>
 
-          {/* Center - Search */}
-          {showSearch && user && (
-            <div className="flex-1 max-w-lg mx-8">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+          {/* Center Section - Search */}
+          {showSearch && (
+            <div className="hidden md:flex flex-1 max-w-md mx-8">
+              <div className="relative w-full">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="Search tickets, users, or content..."
+                  placeholder="Search tickets..."
+                  className="w-full pl-10 pr-4 py-2 bg-muted border border-border rounded-lg text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   onChange={(e) => onSearch?.(e.target.value)}
-                  className="w-full pl-11 pr-4 py-2.5 bg-muted/50 border border-border rounded-xl text-sm text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                 />
               </div>
             </div>
           )}
 
-          {/* Right side - Actions and User */}
+          {/* Right Section */}
           <div className="flex items-center space-x-2">
             {user ? (
               <>
@@ -130,7 +127,7 @@ export function Navbar({
                   <Button
                     onClick={onCreateTicket}
                     size="sm"
-                    className="hidden sm:flex items-center space-x-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                    className="hidden sm:flex items-center space-x-2 bg-primary hover:bg-primary/90"
                   >
                     <Plus className="w-4 h-4" />
                     <span>New Ticket</span>
@@ -206,23 +203,32 @@ export function Navbar({
                       <p className="text-sm font-medium text-foreground">
                         {profile?.name || user.email?.split("@")[0] || "User"}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {profile?.role || "Member"}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${getRoleColor(profile?.role || "user")}`}
+                        >
+                          {getRoleDisplayName(profile?.role || "user")}
+                        </span>
+                      </div>
                     </div>
                     <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
                   </Button>
 
                   {/* User Dropdown Menu */}
                   {showUserMenu && (
-                    <div className="absolute right-0 mt-2 w-56 bg-card border border-border rounded-xl shadow-lg py-2 z-50">
+                    <div className="absolute right-0 mt-2 w-64 bg-card border border-border rounded-xl shadow-lg py-2 z-50">
                       <div className="px-4 py-3 border-b border-border">
                         <p className="text-sm font-medium text-foreground">
                           {profile?.name || user.email?.split("@")[0] || "User"}
                         </p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground mb-2">
                           {user.email}
                         </p>
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full font-medium ${getRoleColor(profile?.role || "user")}`}
+                        >
+                          {getRoleDisplayName(profile?.role || "user")}
+                        </span>
                       </div>
 
                       <div className="py-2">
@@ -234,6 +240,32 @@ export function Navbar({
                           <Settings className="w-4 h-4" />
                           <span>Settings</span>
                         </button>
+
+                        {/* Admin-only options */}
+                        {permissions.isAdmin && (
+                          <>
+                            <div className="border-t border-border my-2"></div>
+                            <div className="px-4 py-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Admin Tools
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => navigate("/admin/users")}
+                              className="flex items-center space-x-3 w-full px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                            >
+                              <Users className="w-4 h-4" />
+                              <span>Manage Users</span>
+                            </button>
+                            <button
+                              onClick={() => navigate("/admin/settings")}
+                              className="flex items-center space-x-3 w-full px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                            >
+                              <Shield className="w-4 h-4" />
+                              <span>System Settings</span>
+                            </button>
+                          </>
+                        )}
                       </div>
 
                       <div className="border-t border-border pt-2">
