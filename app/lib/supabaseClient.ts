@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -11,19 +11,8 @@ if (!supabaseAnonKey) {
   throw new Error("Missing VITE_SUPABASE_ANON_KEY environment variable");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    storageKey: "supabase.auth.token",
-    flowType: "pkce",
-  },
-});
+// Client-side Supabase instance with SSR-compatible cookie handling
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
-export const supabaseServer = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
-});
+// Legacy export for backward compatibility
+export const supabaseServer = supabase;

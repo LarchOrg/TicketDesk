@@ -1,313 +1,258 @@
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  Plus,
-  TrendingUp,
-  Users,
-} from "lucide-react";
-import { useLoaderData, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { AuthGuard } from "~/components/AuthGuard";
 import DashboardStats from "~/components/DashboardStats";
 import TicketCard from "~/components/TicketCard";
-import { supabaseServer } from "~/lib/supabaseClient";
+import { createSupabaseServerClient } from "~/lib/supabase-server";
 import type { Ticket, TicketStats } from "~/lib/types";
 import type { Route } from "./+types/dashboard";
 
-export async function loader({}: Route.LoaderArgs) {
+export async function loader({ request }: Route.LoaderArgs) {
+  console.log("🔍 Dashboard loader starting...");
+
   try {
-    // Get recent tickets with profile information
-    const { data: recentTicketsData, error: ticketsError } =
-      await supabaseServer
-        .from("tickets")
-        .select(
-          `
-        id,
-        title,
-        description,
-        status,
-        priority,
-        created_at,
-        updated_at,
-        created_by,
-        assigned_to,
-        profiles!tickets_created_by_fkey (
-          name,
-          email
-        )
-      `
-        )
-        .order("created_at", { ascending: false })
-        .limit(6);
+    // Create server-side Supabase client with cookie handling
+    const { supabase, response } = createSupabaseServerClient(request);
 
-    console.log("📋 Recent tickets query result:", {
-      data: recentTicketsData,
-      error: ticketsError,
-    });
+    // Check authentication
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
 
-    // Get all tickets for stats
-    const { data: allTicketsData, error: statsError } = await supabaseServer
+    if (sessionError) {
+      console.error("❌ Session error in dashboard loader:", sessionError);
+      throw new Response("Authentication error", { status: 401 });
+    }
+
+    if (!session) {
+      console.log("ℹ️ No session found, redirecting to login");
+      throw new Response("Unauthorized", {
+        status: 302,
+        headers: {
+          Location: "/login",
+        },
+      });
+    }
+
+    console.log("✅ Dashboard server session found for user:", session.user.id);
+
+    // Fetch recent tickets (last 10)
+    const { data: ticketsData, error: ticketsError } = await supabase
       .from("tickets")
-      .select("status, priority, created_at");
+      .select(
+        `
+        *,
+        created_by_profile:profiles!tickets_created_by_fkey(name, email),
+        assigned_to_profile:profiles!tickets_assigned_to_fkey(name, email)
+      `
+      )
+      .order("created_at", { ascending: false })
+      .limit(10);
 
-    console.log("📊 Stats query result:", {
-      data: allTicketsData,
-      error: statsError,
-    });
+    // Fetch ticket statistics
+    const { data: statsData, error: statsError } = await supabase
+      .from("tickets")
+      .select("status");
 
-    let stats: TicketStats = {
-      total: 0,
-      open: 0,
-      in_progress: 0,
-      waiting: 0,
-      closed: 0,
-    };
-
-    if (allTicketsData && !statsError) {
-      stats = {
-        total: allTicketsData.length,
-        open: allTicketsData.filter((t) => t.status === "open").length,
-        in_progress: allTicketsData.filter((t) => t.status === "in_progress")
-          .length,
-        waiting: allTicketsData.filter((t) => t.status === "waiting").length,
-        closed: allTicketsData.filter((t) => t.status === "closed").length,
+    if (ticketsError || statsError) {
+      console.error("❌ Dashboard query errors:", { ticketsError, statsError });
+      return {
+        tickets: [],
+        stats: { total: 0, open: 0, in_progress: 0, waiting: 0, closed: 0 },
+        error: ticketsError?.message || statsError?.message || "Unknown error",
       };
-    } else if (statsError) {
-      console.warn("⚠️ Stats query failed:", statsError);
     }
 
     // Transform tickets data
-    const recentTickets: Ticket[] =
-      recentTicketsData?.map((ticket: any) => ({
-        id: ticket.id,
-        title: ticket.title,
-        description: ticket.description,
-        status: ticket.status,
-        priority: ticket.priority,
-        created_at: ticket.created_at,
-        updated_at: ticket.updated_at,
-        created_by: ticket.created_by,
-        assigned_to: ticket.assigned_to,
-        creator_name: ticket.profiles?.name || "Unknown User",
-        creator_email: ticket.profiles?.email || "",
-        assignee_name: undefined,
-        category_id: undefined,
-        tags: [],
-        comments: [],
-        attachments: [],
-      })) || [];
+    const tickets: Ticket[] = (ticketsData || []).map((ticket: any) => ({
+      id: ticket.id,
+      title: ticket.title,
+      description: ticket.description,
+      status: ticket.status,
+      priority: ticket.priority,
+      created_at: ticket.created_at,
+      updated_at: ticket.updated_at,
+      created_by: ticket.created_by,
+      assigned_to: ticket.assigned_to,
+      created_by_profile: ticket.created_by_profile,
+      assigned_to_profile: ticket.assigned_to_profile,
+    }));
 
-    console.log("✅ Dashboard data loaded successfully:", {
-      recentTicketsCount: recentTickets.length,
+    // Calculate stats
+    const stats: TicketStats = (statsData || []).reduce(
+      (acc, ticket) => {
+        acc.total++;
+        switch (ticket.status) {
+          case "open":
+            acc.open++;
+            break;
+          case "in_progress":
+            acc.in_progress++;
+            break;
+          case "waiting":
+            acc.waiting++;
+            break;
+          case "closed":
+            acc.closed++;
+            break;
+        }
+        return acc;
+      },
+      { total: 0, open: 0, in_progress: 0, waiting: 0, closed: 0 }
+    );
+
+    console.log("✅ Dashboard data loaded:", {
+      ticketCount: tickets.length,
       stats,
     });
 
-    return {
-      recentTickets,
-      stats,
-    };
+    return new Response(
+      JSON.stringify({
+        tickets,
+        stats,
+      }),
+      {
+        headers: {
+          "Content-Type": "application/json",
+          ...Object.fromEntries(response.headers.entries()),
+        },
+      }
+    );
   } catch (error) {
-    console.error("❌ Dashboard loader unexpected error:", error);
+    console.error("❌ Dashboard loader exception:", error);
+
+    // If it's already a Response (like redirect), re-throw it
+    if (error instanceof Response) {
+      throw error;
+    }
+
     return {
-      recentTickets: [],
-      stats: {
-        total: 0,
-        open: 0,
-        in_progress: 0,
-        waiting: 0,
-        closed: 0,
-      },
+      tickets: [],
+      stats: { total: 0, open: 0, in_progress: 0, waiting: 0, closed: 0 },
       error: `Unexpected error: ${error instanceof Error ? error.message : "Unknown error"}`,
     };
   }
 }
 
-export default function DashboardPage() {
-  const { recentTickets, stats, error } = useLoaderData<typeof loader>();
+export default function DashboardPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
+
+  // Parse the loader data if it's a Response
+  const data =
+    typeof loaderData === "string" ? JSON.parse(loaderData) : loaderData;
+  const { tickets, stats, error } = data;
 
   const handleCreateTicket = () => {
     navigate("/tickets/new");
-  };
-
-  const handleTicketClick = (ticket: Ticket) => {
-    navigate(`/tickets/${ticket.id}`);
   };
 
   const handleViewAllTickets = () => {
     navigate("/tickets");
   };
 
+  const handleTicketClick = (ticketId: string) => {
+    navigate(`/tickets/${ticketId}`);
+  };
+
   return (
     <AuthGuard>
       <div className="space-y-8">
+        {/* Header */}
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Welcome back! Here's what's happening with your tickets.
+          </p>
+        </div>
+
         {/* Error Display */}
         {error && (
-          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
-            <h3 className="font-semibold text-destructive mb-2">
-              Dashboard Error
-            </h3>
-            <p className="text-sm text-destructive/80">{error}</p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Check the browser console for detailed debugging information.
-            </p>
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-600">Error loading dashboard: {error}</p>
           </div>
         )}
 
-        {/* Dashboard Stats */}
-        <DashboardStats
-          stats={stats}
-          trends={{
-            total: { value: 12, isPositive: true },
-            open: { value: 8, isPositive: false },
-            in_progress: { value: 15, isPositive: true },
-            closed: { value: 25, isPositive: true },
-          }}
-        />
+        {/* Stats */}
+        <DashboardStats stats={stats} />
 
         {/* Quick Actions */}
-        <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
-          <h2 className="text-xl font-bold text-foreground mb-6">
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button
-              onClick={handleCreateTicket}
-              className="flex items-center space-x-4 p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-all duration-200 group"
-            >
-              <div className="w-12 h-12 bg-slate-600 dark:bg-slate-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                <Plus className="w-6 h-6 text-white" />
-              </div>
-              <div className="text-left">
-                <h3 className="font-semibold text-foreground">Create Ticket</h3>
-                <p className="text-sm text-muted-foreground">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-card text-card-foreground p-6 rounded-lg border">
+            <h3 className="text-lg font-semibold mb-2">Quick Actions</h3>
+            <div className="space-y-3">
+              <button
+                onClick={handleCreateTicket}
+                className="w-full text-left p-3 rounded-lg border hover:bg-muted transition-colors"
+              >
+                <div className="font-medium">Create New Ticket</div>
+                <div className="text-sm text-muted-foreground">
                   Submit a new support request
-                </p>
-              </div>
-            </button>
+                </div>
+              </button>
+              <button
+                onClick={handleViewAllTickets}
+                className="w-full text-left p-3 rounded-lg border hover:bg-muted transition-colors"
+              >
+                <div className="font-medium">View All Tickets</div>
+                <div className="text-sm text-muted-foreground">
+                  Browse and manage all tickets
+                </div>
+              </button>
+            </div>
+          </div>
 
-            <button
-              onClick={handleViewAllTickets}
-              className="flex items-center space-x-4 p-4 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-xl transition-all duration-200 group"
-            >
-              <div className="w-12 h-12 bg-blue-600 dark:bg-blue-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                <AlertTriangle className="w-6 h-6 text-white" />
+          <div className="bg-card text-card-foreground p-6 rounded-lg border">
+            <h3 className="text-lg font-semibold mb-2">Activity Summary</h3>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Open Tickets</span>
+                <span className="font-medium">{stats.open}</span>
               </div>
-              <div className="text-left">
-                <h3 className="font-semibold text-foreground">
-                  View All Tickets
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Browse all support tickets
-                </p>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">In Progress</span>
+                <span className="font-medium">{stats.in_progress}</span>
               </div>
-            </button>
-
-            <button className="flex items-center space-x-4 p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-all duration-200 group">
-              <div className="w-12 h-12 bg-slate-600 dark:bg-slate-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                <TrendingUp className="w-6 h-6 text-white" />
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Closed Today</span>
+                <span className="font-medium">{stats.closed}</span>
               </div>
-              <div className="text-left">
-                <h3 className="font-semibold text-foreground">Analytics</h3>
-                <p className="text-sm text-muted-foreground">
-                  View performance metrics
-                </p>
-              </div>
-            </button>
+            </div>
           </div>
         </div>
 
         {/* Recent Tickets */}
-        <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-foreground">
-              Recent Tickets
-            </h2>
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">Recent Tickets</h2>
             <button
               onClick={handleViewAllTickets}
-              className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+              className="text-primary hover:underline"
             >
-              View All →
+              View all
             </button>
           </div>
 
-          {recentTickets.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {recentTickets.map((ticket) => (
+          {tickets.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground mb-4">No tickets yet</p>
+              <button
+                onClick={handleCreateTicket}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+              >
+                Create your first ticket
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(tickets as Ticket[]).map((ticket: Ticket) => (
                 <TicketCard
                   key={ticket.id}
                   ticket={ticket}
-                  onClick={() => handleTicketClick(ticket)}
+                  onClick={() => handleTicketClick(ticket.id)}
                 />
               ))}
             </div>
-          ) : (
-            <div className="text-center py-12">
-              <div className="w-20 h-20 mx-auto mb-6 bg-muted rounded-2xl flex items-center justify-center">
-                <AlertTriangle className="w-10 h-10 text-muted-foreground" />
-              </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">
-                No tickets yet
-              </h3>
-              <p className="text-muted-foreground mb-6">
-                Get started by creating your first support ticket
-              </p>
-              <button
-                onClick={handleCreateTicket}
-                className="px-6 py-3 bg-slate-600 dark:bg-slate-500 hover:bg-slate-700 dark:hover:bg-slate-400 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl"
-              >
-                Create Your First Ticket
-              </button>
-            </div>
           )}
-        </div>
-
-        {/* Activity Summary */}
-        <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
-          <h2 className="text-xl font-bold text-foreground mb-6">
-            Activity Summary
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-muted rounded-2xl flex items-center justify-center">
-                <AlertTriangle className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-2xl font-bold text-foreground mb-1">
-                {stats.open}
-              </h3>
-              <p className="text-sm text-muted-foreground">Open Tickets</p>
-            </div>
-
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-muted rounded-2xl flex items-center justify-center">
-                <Clock className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-2xl font-bold text-foreground mb-1">
-                {stats.in_progress}
-              </h3>
-              <p className="text-sm text-muted-foreground">In Progress</p>
-            </div>
-
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-muted rounded-2xl flex items-center justify-center">
-                <CheckCircle2 className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-2xl font-bold text-foreground mb-1">
-                {stats.closed}
-              </h3>
-              <p className="text-sm text-muted-foreground">Completed</p>
-            </div>
-
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-muted rounded-2xl flex items-center justify-center">
-                <Users className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-2xl font-bold text-foreground mb-1">
-                {stats.total}
-              </h3>
-              <p className="text-sm text-muted-foreground">Total Tickets</p>
-            </div>
-          </div>
         </div>
       </div>
     </AuthGuard>

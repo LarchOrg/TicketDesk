@@ -29,14 +29,13 @@ export default function LoginPage() {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
   const navigate = useNavigate();
   const { refreshSession } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError("");
+    setLoading(true);
 
     console.log("🚀 Starting login for:", formData.email);
 
@@ -58,15 +57,14 @@ export default function LoginPage() {
         return;
       }
 
-      console.log("✅ Login successful for:", authData);
-      console.log("🔄 Refreshing auth context...");
+      console.log("✅ Login successful for:", authData.user.email);
+      console.log("🍪 Session stored in cookies");
 
-      setTimeout(async () => {
-        await refreshSession();
-        console.log("🎉 Redirecting to tickets...");
-        navigate("/");
-      }, 500);
-      //   navigate("/");
+      // The session is now automatically stored in cookies by the Supabase client
+      // Refresh the auth context and redirect
+      await refreshSession();
+      console.log("🎉 Redirecting to dashboard...");
+      navigate("/dashboard");
     } catch (error) {
       console.error("❌ Login exception:", error);
       setError(error instanceof Error ? error.message : "An error occurred");
@@ -114,8 +112,6 @@ export default function LoginPage() {
                       value={formData.email}
                       onChange={handleChange}
                       placeholder="Enter your email"
-                      required
-                      disabled={loading}
                     />
                   </div>
 
@@ -130,8 +126,6 @@ export default function LoginPage() {
                       value={formData.password}
                       onChange={handleChange}
                       placeholder="Enter your password"
-                      required
-                      disabled={loading}
                     />
                   </div>
 
