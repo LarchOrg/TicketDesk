@@ -1,8 +1,7 @@
 import { AlertCircle } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useAuth } from "~/auth";
-import { AuthGuard } from "~/components/AuthGuard";
+import { useAuth } from "~/contexts/AuthContext";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -93,7 +92,6 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthGuard requireAuth={false}>
       <div className="flex min-h-screen bg-background">
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="w-full max-w-md">
@@ -166,6 +164,5 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
-    </AuthGuard>
   );
 }

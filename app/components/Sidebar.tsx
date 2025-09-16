@@ -2,15 +2,14 @@ import {
   BarChart3,
   Bell,
   FileText,
-  HelpCircle,
   Home,
   Settings,
   Ticket,
   User,
   Users,
 } from "lucide-react";
-import { useLocation } from "react-router";
-import { useAuth } from "~/auth";
+import { Link, useLocation } from "react-router";
+import { useAuth } from "~/contexts/AuthContext";
 
 interface SidebarProps {
   collapsed?: boolean;
@@ -24,7 +23,6 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
     { name: "Dashboard", href: "/", icon: Home },
     { name: "All Tickets", href: "/tickets", icon: Ticket },
     { name: "My Tickets", href: "/my-tickets", icon: FileText },
-    { name: "Help Center", href: "/help", icon: HelpCircle },
   ];
 
   const secondaryNavigation = [
@@ -57,9 +55,10 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
               const Icon = item.icon;
               const active = isActive(item.href);
               return (
-                <a
+                <Link
                   key={item.name}
-                  href={item.href}
+                  to={item.href}
+                  aria-current={active ? "page" : undefined}
                   className={`flex items-center justify-center p-3 rounded-lg text-sm font-medium transition-all ${
                     active
                       ? "bg-primary/10 text-primary border border-primary/20"
@@ -68,7 +67,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
                   title={item.name}
                 >
                   <Icon className="w-4 h-4" />
-                </a>
+                </Link>
               );
             })}
           </div>
@@ -79,9 +78,10 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
                 const Icon = item.icon;
                 const active = isActive(item.href);
                 return (
-                  <a
+                  <Link
                     key={item.name}
-                    href={item.href}
+                    to={item.href}
+                    aria-current={active ? "page" : undefined}
                     className={`flex items-center justify-center p-3 rounded-lg text-sm font-medium transition-all ${
                       active
                         ? "bg-primary/10 text-primary border border-primary/20"
@@ -90,7 +90,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
                     title={item.name}
                   >
                     <Icon className="w-4 h-4" />
-                  </a>
+                  </Link>
                 );
               })}
             </div>
@@ -131,9 +131,9 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
             const Icon = item.icon;
             const active = isActive(item.href);
             return (
-              <a
+              <Link
                 key={item.name}
-                href={item.href}
+                to={item.href}
                 className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                   active
                     ? "bg-primary/10 text-primary border border-primary/20"
@@ -142,7 +142,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
               >
                 <Icon className="w-4 h-4" />
                 <span>{item.name}</span>
-              </a>
+              </Link>
             );
           })}
         </div>
@@ -156,9 +156,9 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
               const Icon = item.icon;
               const active = isActive(item.href);
               return (
-                <a
+                <Link
                   key={item.name}
-                  href={item.href}
+                  to={item.href}
                   className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                     active
                       ? "bg-primary/10 text-primary border border-primary/20"
@@ -167,7 +167,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
                 >
                   <Icon className="w-4 h-4" />
                   <span>{item.name}</span>
-                </a>
+                </Link>
               );
             })}
           </div>

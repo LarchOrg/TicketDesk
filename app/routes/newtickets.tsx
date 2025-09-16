@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSubmit } from "react-router";
-import { AuthGuard } from "~/components/AuthGuard";
 import TicketForm from "~/components/TicketForm";
 import { createSupabaseServerClient } from "~/lib/supabase-server";
 import type { TicketFormData } from "~/lib/types";
@@ -249,7 +248,6 @@ export default function NewTicketPage({
   };
 
   return (
-    <AuthGuard>
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
@@ -295,6 +293,6 @@ export default function NewTicketPage({
           />
         </div>
       </div>
-    </AuthGuard>
+
   );
 }

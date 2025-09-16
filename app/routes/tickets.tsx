@@ -1,7 +1,6 @@
 import { Grid, List, Plus } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { AuthGuard } from "~/components/AuthGuard";
 import TicketCard from "~/components/TicketCard";
 import TicketTable from "~/components/TicketTable";
 import { createSupabaseServerClient } from "~/lib/supabase-server";
@@ -209,129 +208,125 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <AuthGuard>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Support Tickets
-            </h1>
-            <p className="text-muted-foreground">
-              Manage and track all support requests
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            {/* View Mode Toggle */}
-            <div className="flex items-center border rounded-lg p-1">
-              <button
-                onClick={() => setViewMode("grid")}
-                className={`p-2 rounded ${
-                  viewMode === "grid"
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                }`}
-              >
-                <Grid className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => setViewMode("list")}
-                className={`p-2 rounded ${
-                  viewMode === "list"
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                }`}
-              >
-                <List className="h-4 w-4" />
-              </button>
-            </div>
-
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Support Tickets</h1>
+          <p className="text-muted-foreground">
+            Manage and track all support requests
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          {/* View Mode Toggle */}
+          <div className="flex items-center border rounded-lg p-1">
             <button
-              onClick={handleCreateTicket}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+              onClick={() => setViewMode("grid")}
+              className={`p-2 rounded ${
+                viewMode === "grid"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted"
+              }`}
             >
-              <Plus className="h-4 w-4" />
-              New Ticket
+              <Grid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-2 rounded ${
+                viewMode === "list"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted"
+              }`}
+            >
+              <List className="h-4 w-4" />
             </button>
           </div>
+
+          <button
+            onClick={handleCreateTicket}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            New Ticket
+          </button>
         </div>
-
-        {/* Error Display */}
-        {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-600">Error loading tickets: {error}</p>
-          </div>
-        )}
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="bg-card text-card-foreground p-6 rounded-lg border">
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <p className="text-sm text-muted-foreground">Total Tickets</p>
-          </div>
-          <div className="bg-card text-card-foreground p-6 rounded-lg border">
-            <div className="text-2xl font-bold text-red-600">{stats.open}</div>
-            <p className="text-sm text-muted-foreground">Open</p>
-          </div>
-          <div className="bg-card text-card-foreground p-6 rounded-lg border">
-            <div className="text-2xl font-bold text-yellow-600">
-              {stats.in_progress}
-            </div>
-            <p className="text-sm text-muted-foreground">In Progress</p>
-          </div>
-          <div className="bg-card text-card-foreground p-6 rounded-lg border">
-            <div className="text-2xl font-bold text-blue-600">
-              {stats.waiting}
-            </div>
-            <p className="text-sm text-muted-foreground">Waiting</p>
-          </div>
-          <div className="bg-card text-card-foreground p-6 rounded-lg border">
-            <div className="text-2xl font-bold text-green-600">
-              {stats.closed}
-            </div>
-            <p className="text-sm text-muted-foreground">Closed</p>
-          </div>
-        </div>
-
-        {/* Tickets Display */}
-        {tickets.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
-              <Plus className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">No tickets found</h3>
-            <p className="text-muted-foreground mb-4">
-              {filters.status || filters.priority || filters.search
-                ? "No tickets match your current filters."
-                : "Get started by creating your first support ticket."}
-            </p>
-            <button
-              onClick={handleCreateTicket}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Create First Ticket
-            </button>
-          </div>
-        ) : viewMode === "grid" ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {tickets.map((ticket: Ticket) => (
-              <TicketCard
-                key={ticket.id}
-                ticket={ticket}
-                onClick={() => handleTicketClick(ticket.id)}
-              />
-            ))}
-          </div>
-        ) : (
-          <TicketTable
-            tickets={tickets}
-            onEdit={(ticket: Ticket) => handleEditTicket(ticket.id)}
-            onDelete={(ticket: Ticket) => handleDeleteTicket(ticket.id)}
-            onTicketClick={(ticket: Ticket) => handleTicketClick(ticket.id)}
-          />
-        )}
       </div>
-    </AuthGuard>
+
+      {/* Error Display */}
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-red-600">Error loading tickets: {error}</p>
+        </div>
+      )}
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="bg-card text-card-foreground p-6 rounded-lg border">
+          <div className="text-2xl font-bold">{stats.total}</div>
+          <p className="text-sm text-muted-foreground">Total Tickets</p>
+        </div>
+        <div className="bg-card text-card-foreground p-6 rounded-lg border">
+          <div className="text-2xl font-bold text-red-600">{stats.open}</div>
+          <p className="text-sm text-muted-foreground">Open</p>
+        </div>
+        <div className="bg-card text-card-foreground p-6 rounded-lg border">
+          <div className="text-2xl font-bold text-yellow-600">
+            {stats.in_progress}
+          </div>
+          <p className="text-sm text-muted-foreground">In Progress</p>
+        </div>
+        <div className="bg-card text-card-foreground p-6 rounded-lg border">
+          <div className="text-2xl font-bold text-blue-600">
+            {stats.waiting}
+          </div>
+          <p className="text-sm text-muted-foreground">Waiting</p>
+        </div>
+        <div className="bg-card text-card-foreground p-6 rounded-lg border">
+          <div className="text-2xl font-bold text-green-600">
+            {stats.closed}
+          </div>
+          <p className="text-sm text-muted-foreground">Closed</p>
+        </div>
+      </div>
+
+      {/* Tickets Display */}
+      {tickets.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
+            <Plus className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-semibold mb-2">No tickets found</h3>
+          <p className="text-muted-foreground mb-4">
+            {filters.status || filters.priority || filters.search
+              ? "No tickets match your current filters."
+              : "Get started by creating your first support ticket."}
+          </p>
+          <button
+            onClick={handleCreateTicket}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Create First Ticket
+          </button>
+        </div>
+      ) : viewMode === "grid" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {tickets.map((ticket: Ticket) => (
+            <TicketCard
+              key={ticket.id}
+              ticket={ticket}
+              onClick={() => handleTicketClick(ticket.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <TicketTable
+          tickets={tickets}
+          onEdit={(ticket: Ticket) => handleEditTicket(ticket.id)}
+          onDelete={(ticket: Ticket) => handleDeleteTicket(ticket.id)}
+          onTicketClick={(ticket: Ticket) => handleTicketClick(ticket.id)}
+        />
+      )}
+    </div>
   );
 }

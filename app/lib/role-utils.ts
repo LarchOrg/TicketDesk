@@ -1,4 +1,4 @@
-import { useAuth } from "~/auth";
+import { useAuth } from "~/contexts/AuthContext";
 
 export type UserRole = "admin" | "agent" | "user";
 

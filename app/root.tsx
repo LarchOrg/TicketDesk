@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import React, { useCallback } from "react";
 import {
   isRouteErrorResponse,
   Links,
@@ -7,129 +7,41 @@ import {
   Scripts,
   ScrollRestoration,
   useLocation,
+  useNavigate,
 } from "react-router";
-
 import type { Route } from "./+types/root";
 import "./app.css";
-import { AuthProvider, useAuth } from "./auth";
+import { LoadingFallback } from "./components/LoadingComponents";
 import { Navbar } from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { SidebarProvider, useSidebar } from "./contexts/SidebarContext";
+import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 
-// Theme Context
-interface ThemeContextType {
-  darkMode: boolean;
-  toggleDarkMode: () => void;
-}
-
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
-
-export const useTheme = () => {
-  const context = useContext(ThemeContext);
-  if (context === undefined) {
-    throw new Error("useTheme must be used within a ThemeProvider");
-  }
-  return context;
-};
-
-// Theme Provider Component
-function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [darkMode, setDarkMode] = useState(false);
-
-  useEffect(() => {
-    // Check for saved theme preference or default to system preference
-    const savedTheme = localStorage.getItem("theme");
-    const systemPrefersDark = window.matchMedia(
-      "(prefers-color-scheme: dark)"
-    ).matches;
-
-    if (savedTheme === "dark" || (!savedTheme && systemPrefersDark)) {
-      setDarkMode(true);
-      document.documentElement.classList.add("dark");
-    } else {
-      setDarkMode(false);
-      document.documentElement.classList.remove("dark");
-    }
-  }, []);
-
-  const toggleDarkMode = () => {
-    const newDarkMode = !darkMode;
-    setDarkMode(newDarkMode);
-
-    if (newDarkMode) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  };
-
-  return (
-    <ThemeContext.Provider value={{ darkMode, toggleDarkMode }}>
-      {children}
-    </ThemeContext.Provider>
-  );
-}
-
-// Sidebar Context
-interface SidebarContextType {
-  sidebarOpen: boolean;
-  setSidebarOpen: (open: boolean) => void;
-  toggleSidebar: () => void;
-}
-
-const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
-
-export const useSidebar = () => {
-  const context = useContext(SidebarContext);
-  if (context === undefined) {
-    throw new Error("useSidebar must be used within a SidebarProvider");
-  }
-  return context;
-};
-
-// Sidebar Provider Component
-function SidebarProvider({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  useEffect(() => {
-    // Check for saved sidebar preference
-    const savedSidebarState = localStorage.getItem("sidebarOpen");
-    if (savedSidebarState !== null) {
-      setSidebarOpen(JSON.parse(savedSidebarState));
-    }
-  }, []);
-
-  const toggleSidebar = () => {
-    const newState = !sidebarOpen;
-    setSidebarOpen(newState);
-    localStorage.setItem("sidebarOpen", JSON.stringify(newState));
-  };
-
-  return (
-    <SidebarContext.Provider
-      value={{ sidebarOpen, setSidebarOpen, toggleSidebar }}
-    >
-      {children}
-    </SidebarContext.Provider>
-  );
-}
-
-// Main App Layout Component
 function AppLayout() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
   const { sidebarOpen, toggleSidebar } = useSidebar();
   const location = useLocation();
+  const navigate = useNavigate();
 
-  // Don't show sidebar and navbar on auth pages
-  const isAuthPage =
-    location.pathname === "/login" || location.pathname === "/signup";
+  const isAuthPage = /^\/(login|signup)(\/|$)/.test(location.pathname);
 
-  const handleCreateTicket = () => {
-    window.location.href = "/tickets/new";
-  };
+  const handleCreateTicket = useCallback(
+    () => navigate("/tickets/new"),
+    [navigate]
+  );
 
+  // Initial loading state (only shown before auth is resolved)
+  if (loading && !user) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <LoadingFallback message="Loading..." />
+      </div>
+    );
+  }
+
+  // Public/auth pages or unauthenticated users render the outlet directly
   if (isAuthPage || !user) {
     return (
       <div className="min-h-screen bg-background">
@@ -141,7 +53,6 @@ function AppLayout() {
   return (
     <div className="min-h-screen bg-background">
       <div className="flex h-screen">
-        {/* Sidebar */}
         <div
           className={`${
             sidebarOpen ? "w-72" : "w-16"
@@ -152,9 +63,7 @@ function AppLayout() {
           </div>
         </div>
 
-        {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Navbar */}
           <Navbar
             showSearch={true}
             darkMode={darkMode}
@@ -164,7 +73,6 @@ function AppLayout() {
             onToggleSidebar={toggleSidebar}
           />
 
-          {/* Page Content */}
           <main className="flex-1 overflow-auto bg-background">
             <div className="p-6">
               <Outlet />
@@ -173,7 +81,6 @@ function AppLayout() {
         </div>
       </div>
 
-      {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
@@ -229,6 +136,7 @@ export default function RootLayout() {
 
 // Enhanced Error Boundary with better UX
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const navigate = useNavigate();
   let message = "Oops!";
   let details = "An unexpected error occurred.";
   let stack: string | undefined;
@@ -283,7 +191,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
             Go Back
           </button>
           <button
-            onClick={() => (window.location.href = "/")}
+            onClick={() => navigate("/")}
             className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
           >
             Go Home
