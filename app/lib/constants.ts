@@ -1,4 +1,10 @@
-import { AlertCircle, CheckCircle2, Clock, Pause } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCheck,
+  CheckCircle2,
+  Clock,
+  RotateCcw,
+} from "lucide-react";
 
 // Status configuration
 export const statusConfig = {
@@ -14,17 +20,23 @@ export const statusConfig = {
     icon: Clock,
     description: "Ticket is being worked on",
   },
-  waiting: {
-    label: "Waiting",
-    color: "bg-blue-100 text-blue-800 border-blue-200",
-    icon: Pause,
-    description: "Waiting for customer response",
+  resolved: {
+    label: "Resolved",
+    color: "bg-purple-100 text-purple-800 border-purple-200",
+    icon: CheckCheck,
+    description: "Issue has been resolved, awaiting user confirmation",
+  },
+  reopened: {
+    label: "Reopened",
+    color: "bg-orange-100 text-orange-800 border-orange-200",
+    icon: RotateCcw,
+    description: "Ticket was reopened and needs attention",
   },
   closed: {
     label: "Closed",
     color: "bg-green-100 text-green-800 border-green-200",
     icon: CheckCircle2,
-    description: "Ticket has been resolved",
+    description: "Ticket has been resolved and closed",
   },
 } as const;
 
@@ -60,7 +72,8 @@ export const priorityConfig = {
 export const TICKET_STATUSES = [
   { value: "open", label: "Open" },
   { value: "in_progress", label: "In Progress" },
-  { value: "waiting", label: "Waiting" },
+  { value: "resolved", label: "Resolved" },
+  { value: "reopened", label: "Reopened" },
   { value: "closed", label: "Closed" },
 ] as const;
 

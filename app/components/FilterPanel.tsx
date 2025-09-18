@@ -21,7 +21,8 @@ export default function FilterPanel({
     { value: "all", label: "All Status" },
     { value: "open", label: "Open" },
     { value: "in_progress", label: "In Progress" },
-    { value: "waiting", label: "Waiting" },
+    { value: "resolved", label: "Resolved" },
+    { value: "reopened", label: "Reopened" },
     { value: "closed", label: "Closed" },
   ];
 

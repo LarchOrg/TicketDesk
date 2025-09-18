@@ -1,21 +1,24 @@
 import {
-  ArrowLeft,
-  Calendar,
-  Clock,
-  Edit,
-  MessageSquare,
-  Paperclip,
-  Save,
-  User,
-  X,
+  ArrowLeftIcon,
+  CalendarIcon,
+  ClockIcon,
+  EditIcon,
+  EyeOffIcon,
+  MessageCircleIcon,
+  PaperclipIcon,
+  SaveIcon,
+  UserIcon,
+  XIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Form, useNavigate, useSubmit } from "react-router";
+import { useNavigate, useSubmit } from "react-router";
 import PriorityBadge from "~/components/PriorityBadge";
+import { StatusBadge, StatusTransition } from "~/components/StatusTransition";
+import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -25,25 +28,17 @@ import {
 } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
 import { useAuth } from "~/contexts/AuthContext";
-import { useRolePermissions } from "~/lib/role-utils";
+import { canTransitionStatus, useRolePermissions } from "~/lib/role-utils";
 import { createSupabaseServerClient } from "~/lib/supabase-server";
 import type { TicketPriority, TicketStatus } from "~/lib/types";
-import { getStatusColor } from "~/lib/utils";
 import type { Route } from "./+types/tickets.$ticketId";
-
-export function meta({ params }: Route.MetaArgs) {
-  return [
-    { title: `Ticket #${params.ticketId} - TicketDesk` },
-    { name: "description", content: "View and manage ticket details" },
-  ];
-}
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { supabase: serverSupabase, response } =
     createSupabaseServerClient(request);
 
   try {
-    // Get authenticated user (more secure than getSession)
+    // Verify authentication
     const {
       data: { user },
       error: userError,
@@ -99,18 +94,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       .in("role", ["agent", "admin"])
       .order("name");
 
-    return {
-      ticket,
-      comments: comments || [],
-      attachments: attachments || [],
-      assignableUsers: assignableUsers || [],
-    };
-  } catch (error) {
+    return Response.json(
+      {
+        ticket,
+        comments: comments || [],
+        attachments: attachments || [],
+        assignableUsers: assignableUsers || [],
+      },
+      { headers: response.headers }
+    );
+  } catch (error: any) {
     console.error("Loader error:", error);
-    if (error instanceof Response) {
-      throw error;
-    }
-    throw new Response("Internal server error", { status: 500 });
+    throw new Response("Internal Server Error", { status: 500 });
   }
 }
 
@@ -134,11 +129,23 @@ export async function action({ request, params }: Route.ActionArgs) {
       );
     }
 
+    const { data: profile } = await serverSupabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile) {
+      return Response.json(
+        { success: false, message: "User profile not found" },
+        { status: 404, headers: response.headers }
+      );
+    }
+
     if (actionType === "updateTicket") {
       const updates = {
         title: formData.get("title") as string,
         description: formData.get("description") as string,
-        status: formData.get("status") as TicketStatus,
         priority: formData.get("priority") as TicketPriority,
         assigned_to: (formData.get("assigned_to") as string) || null,
       };
@@ -152,6 +159,73 @@ export async function action({ request, params }: Route.ActionArgs) {
 
       return Response.json(
         { success: true, message: "Ticket updated successfully" },
+        { headers: response.headers }
+      );
+    }
+
+    if (actionType === "statusTransition") {
+      const newStatus = formData.get("newStatus") as TicketStatus;
+      const transitionLabel = formData.get("transitionLabel") as string;
+
+      const { data: currentTicket } = await serverSupabase
+        .from("tickets")
+        .select("status, created_by, assigned_to")
+        .eq("id", params.ticketId)
+        .single();
+
+      if (!currentTicket) {
+        return Response.json(
+          { success: false, message: "Ticket not found" },
+          { status: 404, headers: response.headers }
+        );
+      }
+
+      const canTransition = canTransitionStatus(
+        currentTicket.status as TicketStatus,
+        newStatus,
+        profile.role as any,
+        user.id,
+        currentTicket
+      );
+
+      if (!canTransition) {
+        return Response.json(
+          {
+            success: false,
+            message: `You cannot ${transitionLabel.toLowerCase()} this ticket`,
+          },
+          { status: 403, headers: response.headers }
+        );
+      }
+
+      // Update ticket status
+      const { error } = await serverSupabase
+        .from("tickets")
+        .update({
+          status: newStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", params.ticketId);
+
+      if (error) throw error;
+      console.log(error, 'Error while status change')
+
+      // Add a system comment about the status change
+      await serverSupabase.from("comments").insert([
+        {
+          ticket_id: params.ticketId,
+          user_id: user.id,
+          content: `Ticket status changed to ${newStatus}`,
+          comment_type: "system",
+          is_internal: false,
+        },
+      ]);
+
+      return Response.json(
+        {
+          success: true,
+          message: `Ticket ${transitionLabel.toLowerCase()}ed successfully`,
+        },
         { headers: response.headers }
       );
     }
@@ -197,7 +271,7 @@ export default function TicketDetailsPage({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
-  const { ticket, comments, attachments, assignableUsers } = loaderData;
+  const { ticket, comments, attachments, assignableUsers } = loaderData as any;
   const { user } = useAuth();
   const permissions = useRolePermissions();
   const navigate = useNavigate();
@@ -207,7 +281,6 @@ export default function TicketDetailsPage({
   const [editData, setEditData] = useState({
     title: ticket.title,
     description: ticket.description,
-    status: ticket.status,
     priority: ticket.priority,
     assigned_to: ticket.assigned_to || "unassigned",
   });
@@ -218,10 +291,8 @@ export default function TicketDetailsPage({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const canEdit =
-    permissions.isAdmin ||
-    permissions.isAgent ||
-    ticket.created_by === user?.id;
-  const canAssign = permissions.isAdmin || permissions.isAgent;
+    permissions.canManageAllTickets || ticket.created_by === user?.id;
+  const canAssign = permissions.canAssignTickets;
 
   // Handle action results
   useEffect(() => {
@@ -232,20 +303,15 @@ export default function TicketDetailsPage({
       };
       if (typedActionData.success) {
         if (typedActionData.message) {
-          // Show success message (you can replace with a toast notification)
           console.log("✅ Success:", typedActionData.message);
         }
 
-        // Clear comment form if it was a comment submission
         if (typedActionData.message?.includes("Comment added")) {
           setNewComment("");
           setCommentType("comment");
         }
 
-        // Refresh the page to show updated data
-        window.location.reload();
       } else if (typedActionData.message) {
-        // Show error message
         alert(typedActionData.message);
       }
     }
@@ -258,21 +324,58 @@ export default function TicketDetailsPage({
       formData.append("actionType", "updateTicket");
       formData.append("title", editData.title);
       formData.append("description", editData.description);
-      formData.append("status", editData.status);
       formData.append("priority", editData.priority);
       formData.append(
         "assigned_to",
         editData.assigned_to === "unassigned" ? "" : editData.assigned_to
       );
 
-      // Use React Router's submit instead of fetch
       submit(formData, { method: "POST" });
-
-      // Note: The response will be handled by the action and page will reload
       setIsEditing(false);
     } catch (error) {
       console.error("Update error:", error);
-      alert("Failed to update ticket");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleStatusTransition = async (
+    newStatus: TicketStatus,
+    transitionLabel: string
+  ) => {
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append("actionType", "statusTransition");
+      formData.append("newStatus", newStatus);
+      formData.append("transitionLabel", transitionLabel);
+
+      submit(formData, { method: "POST" });
+    } catch (error) {
+      console.error("Status transition error:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAddComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append("actionType", "addComment");
+      formData.append("content", newComment);
+      formData.append("comment_type", commentType);
+      formData.append(
+        "is_internal",
+        commentType === "internal_note" ? "true" : "false"
+      );
+
+      submit(formData, { method: "POST" });
+    } catch (error) {
+      console.error("Comment error:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -284,7 +387,7 @@ export default function TicketDetailsPage({
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-6xl mx-auto p-6">
+      <div className="max-w-full mx-auto p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-4">
@@ -294,8 +397,7 @@ export default function TicketDetailsPage({
               onClick={() => navigate("/tickets")}
               className="flex items-center space-x-2"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back to Tickets</span>
+              <ArrowLeftIcon className="w-4 h-4" />
             </Button>
             <div>
               <h1 className="text-2xl font-bold text-foreground">
@@ -317,7 +419,7 @@ export default function TicketDetailsPage({
                     onClick={() => setIsEditing(false)}
                     disabled={isSubmitting}
                   >
-                    <X className="w-4 h-4 mr-2" />
+                    <XIcon className="w-4 h-4 mr-2" />
                     Cancel
                   </Button>
                   <Button
@@ -325,13 +427,13 @@ export default function TicketDetailsPage({
                     onClick={handleSaveTicket}
                     disabled={isSubmitting}
                   >
-                    <Save className="w-4 h-4 mr-2" />
+                    <SaveIcon className="w-4 h-4 mr-2" />
                     {isSubmitting ? "Saving..." : "Save Changes"}
                   </Button>
                 </>
               ) : (
                 <Button size="sm" onClick={() => setIsEditing(true)}>
-                  <Edit className="w-4 h-4 mr-2" />
+                  <EditIcon className="w-4 h-4 mr-2" />
                   Edit Ticket
                 </Button>
               )}
@@ -364,11 +466,7 @@ export default function TicketDetailsPage({
                     )}
                   </div>
                   <div className="flex items-center space-x-2 ml-4">
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(ticket.status)}`}
-                    >
-                      {ticket.status.replace("_", " ").toUpperCase()}
-                    </span>
+                    <StatusBadge status={ticket.status} />
                     <PriorityBadge priority={ticket.priority} />
                   </div>
                 </div>
@@ -377,7 +475,12 @@ export default function TicketDetailsPage({
                 {isEditing ? (
                   <div className="space-y-4">
                     <div>
-                      <Label htmlFor="description">Description</Label>
+                      <label
+                        htmlFor="description"
+                        className="block text-sm font-medium mb-2"
+                      >
+                        Description
+                      </label>
                       <Textarea
                         id="description"
                         value={editData.description}
@@ -392,34 +495,14 @@ export default function TicketDetailsPage({
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor="status">Status</Label>
-                        <Select
-                          value={editData.status}
-                          onValueChange={(value) =>
-                            setEditData((prev) => ({
-                              ...prev,
-                              status: value as TicketStatus,
-                            }))
-                          }
+                        <label
+                          htmlFor="priority"
+                          className="block text-sm font-medium mb-2"
                         >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="open">Open</SelectItem>
-                            <SelectItem value="in_progress">
-                              In Progress
-                            </SelectItem>
-                            <SelectItem value="waiting">Waiting</SelectItem>
-                            <SelectItem value="closed">Closed</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div>
-                        <Label htmlFor="priority">Priority</Label>
+                          Priority
+                        </label>
                         <Select
                           value={editData.priority}
                           onValueChange={(value) =>
@@ -443,27 +526,31 @@ export default function TicketDetailsPage({
 
                       {canAssign && (
                         <div>
-                          <Label htmlFor="assigned_to">Assigned To</Label>
+                          <label
+                            htmlFor="assigned_to"
+                            className="block text-sm font-medium mb-2"
+                          >
+                            Assigned To
+                          </label>
                           <Select
-                            value={editData.assigned_to || "unassigned"}
+                            value={editData.assigned_to}
                             onValueChange={(value) =>
                               setEditData((prev) => ({
                                 ...prev,
-                                assigned_to:
-                                  value === "unassigned" ? "" : value,
+                                assigned_to: value,
                               }))
                             }
                           >
                             <SelectTrigger>
-                              <SelectValue placeholder="Unassigned" />
+                              <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="unassigned">
                                 Unassigned
                               </SelectItem>
-                              {assignableUsers.map((user) => (
+                              {assignableUsers.map((user: any) => (
                                 <SelectItem key={user.id} value={user.id}>
-                                  {user.name || user.email}
+                                  {user.name} ({user.email})
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -473,10 +560,26 @@ export default function TicketDetailsPage({
                     </div>
                   </div>
                 ) : (
-                  <div className="prose max-w-none">
-                    <p className="text-foreground whitespace-pre-wrap">
-                      {ticket.description}
-                    </p>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-foreground whitespace-pre-wrap">
+                        {ticket.description}
+                      </p>
+                    </div>
+
+                    {/* Status Transition Component */}
+                    <div className="border-t pt-4">
+                      <StatusTransition
+                        currentStatus={ticket.status}
+                        ticket={{
+                          id: ticket.id,
+                          created_by: ticket.created_by,
+                          assigned_to: ticket.assigned_to,
+                        }}
+                        onStatusChange={handleStatusTransition}
+                        disabled={isSubmitting}
+                      />
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -486,61 +589,71 @@ export default function TicketDetailsPage({
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <MessageSquare className="w-5 h-5" />
+                  <MessageCircleIcon className="w-5 h-5" />
                   <span>Comments ({comments.length})</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Existing Comments */}
-                {comments.map((comment) => (
+                {comments.map((comment: any) => (
                   <div
                     key={comment.id}
-                    className="border-l-4 border-primary/20 pl-4 py-2"
+                    className="border-b pb-4 last:border-b-0"
                   >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                          <span className="text-sm font-medium">
-                            {comment.author?.name?.charAt(0) ||
-                              comment.author?.email?.charAt(0) ||
-                              "U"}
+                    <div className="flex items-start space-x-3">
+                      <Avatar className="w-8 h-8">
+                        <AvatarImage src={comment.author?.avatar_url} />
+                        <AvatarFallback>
+                          {comment.author?.name?.charAt(0) || "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <span className="font-medium text-sm">
+                            {comment.author?.name || "Unknown User"}
                           </span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">
-                            {comment.author?.name ||
-                              comment.author?.email ||
-                              "Unknown User"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {formatDate(comment.created_at)}
-                          </p>
+                          </span>
+                          {comment.is_internal && (
+                            <Badge variant="secondary" className="text-xs">
+                              <EyeOffIcon className="w-3 h-3 mr-1" />
+                              Internal
+                            </Badge>
+                          )}
                         </div>
+                        <p className="text-sm text-foreground whitespace-pre-wrap">
+                          {comment.content}
+                        </p>
                       </div>
-                      {comment.is_internal && (
-                        <span className="px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">
-                          Internal
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-sm text-foreground whitespace-pre-wrap">
-                      {comment.content}
                     </div>
                   </div>
                 ))}
 
-                {/* Add New Comment */}
-                <div className="border-t pt-4">
-                  <Form method="post" className="space-y-3">
-                    <input type="hidden" name="actionType" value="addComment" />
+                {/* Add Comment Form */}
+                <form onSubmit={handleAddComment} className="border-t pt-4">
+                  <div className="space-y-3">
+                    <div>
+                      <label
+                        htmlFor="comment"
+                        className="block text-sm font-medium mb-2"
+                      >
+                        Add Comment
+                      </label>
+                      <Textarea
+                        id="comment"
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        placeholder="Write your comment..."
+                        rows={3}
+                      />
+                    </div>
 
-                    <div className="flex items-center space-x-4">
-                      <Label>Comment Type:</Label>
+                    {permissions.canManageAllTickets && (
                       <div className="flex items-center space-x-4">
                         <label className="flex items-center space-x-2">
                           <input
                             type="radio"
-                            name="comment_type"
+                            name="commentType"
                             value="comment"
                             checked={commentType === "comment"}
                             onChange={(e) =>
@@ -549,43 +662,20 @@ export default function TicketDetailsPage({
                           />
                           <span className="text-sm">Public Comment</span>
                         </label>
-                        {(permissions.isAdmin || permissions.isAgent) && (
-                          <label className="flex items-center space-x-2">
-                            <input
-                              type="radio"
-                              name="comment_type"
-                              value="internal_note"
-                              checked={commentType === "internal_note"}
-                              onChange={(e) =>
-                                setCommentType(
-                                  e.target.value as "internal_note"
-                                )
-                              }
-                            />
-                            <span className="text-sm">Internal Note</span>
-                          </label>
-                        )}
+                        <label className="flex items-center space-x-2">
+                          <input
+                            type="radio"
+                            name="commentType"
+                            value="internal_note"
+                            checked={commentType === "internal_note"}
+                            onChange={(e) =>
+                              setCommentType(e.target.value as "internal_note")
+                            }
+                          />
+                          <span className="text-sm">Internal Note</span>
+                        </label>
                       </div>
-                    </div>
-
-                    <input
-                      type="hidden"
-                      name="is_internal"
-                      value={commentType === "internal_note" ? "true" : "false"}
-                    />
-
-                    <Textarea
-                      name="content"
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      placeholder={
-                        commentType === "internal_note"
-                          ? "Add an internal note..."
-                          : "Add a comment..."
-                      }
-                      rows={3}
-                      required
-                    />
+                    )}
 
                     <Button
                       type="submit"
@@ -594,8 +684,8 @@ export default function TicketDetailsPage({
                     >
                       {isSubmitting ? "Adding..." : "Add Comment"}
                     </Button>
-                  </Form>
-                </div>
+                  </div>
+                </form>
               </CardContent>
             </Card>
           </div>
@@ -605,36 +695,33 @@ export default function TicketDetailsPage({
             {/* Ticket Info */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Ticket Information</CardTitle>
+                <CardTitle>Ticket Information</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center space-x-3">
-                  <User className="w-4 h-4 text-muted-foreground" />
+                  <UserIcon className="w-4 h-4 text-muted-foreground" />
                   <div>
                     <p className="text-sm font-medium">Created by</p>
                     <p className="text-sm text-muted-foreground">
-                      {ticket.created_by_profile?.name ||
-                        ticket.created_by_profile?.email ||
-                        "Unknown"}
+                      {ticket.created_by_profile?.name || "Unknown"}
                     </p>
                   </div>
                 </div>
 
                 {ticket.assigned_to_profile && (
                   <div className="flex items-center space-x-3">
-                    <User className="w-4 h-4 text-muted-foreground" />
+                    <UserIcon className="w-4 h-4 text-muted-foreground" />
                     <div>
                       <p className="text-sm font-medium">Assigned to</p>
                       <p className="text-sm text-muted-foreground">
-                        {ticket.assigned_to_profile.name ||
-                          ticket.assigned_to_profile.email}
+                        {ticket.assigned_to_profile.name}
                       </p>
                     </div>
                   </div>
                 )}
 
                 <div className="flex items-center space-x-3">
-                  <Calendar className="w-4 h-4 text-muted-foreground" />
+                  <CalendarIcon className="w-4 h-4 text-muted-foreground" />
                   <div>
                     <p className="text-sm font-medium">Created</p>
                     <p className="text-sm text-muted-foreground">
@@ -646,7 +733,7 @@ export default function TicketDetailsPage({
                 {ticket.updated_at &&
                   ticket.updated_at !== ticket.created_at && (
                     <div className="flex items-center space-x-3">
-                      <Clock className="w-4 h-4 text-muted-foreground" />
+                      <ClockIcon className="w-4 h-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm font-medium">Last updated</p>
                         <p className="text-sm text-muted-foreground">
@@ -662,29 +749,24 @@ export default function TicketDetailsPage({
             {attachments.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg flex items-center space-x-2">
-                    <Paperclip className="w-4 h-4" />
+                  <CardTitle className="flex items-center space-x-2">
+                    <PaperclipIcon className="w-4 h-4" />
                     <span>Attachments ({attachments.length})</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {attachments.map((attachment) => (
+                    {attachments.map((attachment: any) => (
                       <div
                         key={attachment.id}
-                        className="flex items-center justify-between p-2 bg-muted rounded"
+                        className="flex items-center justify-between p-2 border rounded"
                       >
-                        <div>
-                          <p className="text-sm font-medium">
-                            {attachment.filename}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {(attachment.file_size / 1024).toFixed(1)} KB
-                          </p>
-                        </div>
-                        <Button variant="ghost" size="sm">
-                          Download
-                        </Button>
+                        <span className="text-sm truncate">
+                          {attachment.filename}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {Math.round(attachment.file_size / 1024)}KB
+                        </span>
                       </div>
                     ))}
                   </div>

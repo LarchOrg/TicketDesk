@@ -40,8 +40,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       });
     }
 
-    console.log("✅ Server session found for user:", session.user.id);
-
     // Build query for tickets
     let ticketsQuery = supabase
       .from("tickets")
@@ -54,57 +52,83 @@ export async function loader({ request }: Route.LoaderArgs) {
       )
       .order("created_at", { ascending: false });
 
+    // Build query for stats (all tickets for counting)
+    let statsQuery = supabase.from("tickets").select("status");
+
     // Apply filters
     if (statusFilter) {
       ticketsQuery = ticketsQuery.eq("status", statusFilter);
     }
+
     if (priorityFilter) {
       ticketsQuery = ticketsQuery.eq("priority", priorityFilter);
     }
+
     if (searchFilter) {
       ticketsQuery = ticketsQuery.or(
         `title.ilike.%${searchFilter}%,description.ilike.%${searchFilter}%`
       );
-    }
-
-    // Execute tickets query
-    const { data: ticketsData, error: ticketsError } = await ticketsQuery;
-    console.log("📋 Tickets Query Result:", {
-      data: ticketsData,
-      error: ticketsError,
-    });
-
-    // Build query for stats
-    let statsQuery = supabase.from("tickets").select("status");
-
-    // Apply same filters for stats (except status filter for accurate counts)
-    if (priorityFilter) {
-      statsQuery = statsQuery.eq("priority", priorityFilter);
-    }
-    if (searchFilter) {
+      // Also apply search filter to stats query
       statsQuery = statsQuery.or(
         `title.ilike.%${searchFilter}%,description.ilike.%${searchFilter}%`
       );
     }
 
+    const { data: ticketsData, error: ticketsError } = await ticketsQuery;
     const { data: statsData, error: statsError } = await statsQuery;
-    console.log("📊 Stats Query Result:", {
-      data: statsData,
-      error: statsError,
-    });
 
     if (ticketsError || statsError) {
-      console.error("❌ Query errors:", { ticketsError, statsError });
-      return {
+      return Response.json({
         tickets: [],
-        stats: { total: 0, open: 0, in_progress: 0, waiting: 0, closed: 0 },
+        stats: {
+          total: 0,
+          open: 0,
+          in_progress: 0,
+          resolved: 0,
+          reopened: 0,
+          closed: 0,
+        },
         filters: {
           status: statusFilter,
           priority: priorityFilter,
           search: searchFilter,
         },
-        error: ticketsError?.message || statsError?.message || "Unknown error",
-      };
+        error:
+          ticketsError?.message ||
+          statsError?.message ||
+          "Failed to fetch tickets",
+      });
+    }
+
+    console.log("📊 Query Results:", {
+      ticketsCount: ticketsData?.length,
+      statsCount: statsData?.length,
+      ticketsError,
+      statsError,
+    });
+
+    if (ticketsError || statsError) {
+      console.error("❌ Query errors:", { ticketsError, statsError });
+      return Response.json({
+        tickets: [],
+        stats: {
+          total: 0,
+          open: 0,
+          in_progress: 0,
+          resolved: 0,
+          reopened: 0,
+          closed: 0,
+        },
+        filters: {
+          status: statusFilter,
+          priority: priorityFilter,
+          search: searchFilter,
+        },
+        error:
+          (ticketsError as any)?.message ||
+          (statsError as any)?.message ||
+          "Failed to fetch tickets",
+      });
     }
 
     // Transform tickets data
@@ -122,7 +146,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       assigned_to_profile: ticket.assigned_to_profile,
     }));
 
-    // Calculate stats
+    // Calculate stats from all tickets (not filtered)
     const stats: TicketStats = (statsData || []).reduce(
       (acc, ticket) => {
         acc.total++;
@@ -133,8 +157,11 @@ export async function loader({ request }: Route.LoaderArgs) {
           case "in_progress":
             acc.in_progress++;
             break;
-          case "waiting":
-            acc.waiting++;
+          case "resolved":
+            acc.resolved++;
+            break;
+          case "reopened":
+            acc.reopened++;
             break;
           case "closed":
             acc.closed++;
@@ -142,13 +169,23 @@ export async function loader({ request }: Route.LoaderArgs) {
         }
         return acc;
       },
-      { total: 0, open: 0, in_progress: 0, waiting: 0, closed: 0 }
+      {
+        total: 0,
+        open: 0,
+        in_progress: 0,
+        resolved: 0,
+        reopened: 0,
+        closed: 0,
+      }
     );
 
-    console.log("✅ Final Result:", { ticketCount: tickets.length, stats });
+    console.log("✅ Tickets data loaded:", {
+      ticketCount: tickets.length,
+      stats,
+    });
 
-    return new Response(
-      JSON.stringify({
+    return Response.json(
+      {
         tickets,
         stats,
         filters: {
@@ -156,177 +193,175 @@ export async function loader({ request }: Route.LoaderArgs) {
           priority: priorityFilter,
           search: searchFilter,
         },
-      }),
-      {
-        headers: {
-          "Content-Type": "application/json",
-          ...Object.fromEntries(response.headers.entries()),
-        },
-      }
+      },
+      { headers: response.headers }
     );
   } catch (error) {
-    console.error("❌ Loader exception:", error);
+    console.error("❌ Tickets loader exception:", error);
 
     // If it's already a Response (like redirect), re-throw it
     if (error instanceof Response) {
       throw error;
     }
 
-    return {
+    return Response.json({
       tickets: [],
-      stats: { total: 0, open: 0, in_progress: 0, waiting: 0, closed: 0 },
+      stats: {
+        total: 0,
+        open: 0,
+        in_progress: 0,
+        resolved: 0,
+        reopened: 0,
+        closed: 0,
+      },
       filters: {
         status: statusFilter,
         priority: priorityFilter,
         search: searchFilter,
       },
       error: `Unexpected error: ${error instanceof Error ? error.message : "Unknown error"}`,
-    };
+    });
   }
 }
 
 export default function TicketsPage({ loaderData }: Route.ComponentProps) {
-  const { tickets, stats, filters, error } = loaderData;
+  const { tickets, stats, filters } = loaderData as any;
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   const handleCreateTicket = () => {
-    navigate("/tickets/new");
+    navigate("/newtickets");
   };
 
-  const handleTicketClick = (ticketId: string) => {
+  const handleViewTicket = (ticketId: string) => {
     navigate(`/tickets/${ticketId}`);
   };
 
   const handleEditTicket = (ticketId: string) => {
-    navigate(`/tickets/${ticketId}/edit`);
+    navigate(`/tickets/${ticketId}`);
   };
 
-  const handleDeleteTicket = (ticketId: string) => {
-    // TODO: Implement delete functionality
-    console.log("Delete ticket:", ticketId);
+  const handleDeleteTicket = async (ticketId: string) => {
+    if (confirm("Are you sure you want to delete this ticket?")) {
+      // TODO: Implement delete functionality
+      console.log("Delete ticket:", ticketId);
+    }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Support Tickets</h1>
-          <p className="text-muted-foreground">
-            Manage and track all support requests
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          {/* View Mode Toggle */}
-          <div className="flex items-center border rounded-lg p-1">
+    <div className="min-h-screen bg-background">
+      <div className="max-w-full mx-auto p-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">All Tickets</h1>
+            <p className="text-muted-foreground">
+              Manage and track all support tickets
+            </p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center border rounded-lg">
+              <button
+                onClick={() => setViewMode("grid")}
+                className={`p-2 ${
+                  viewMode === "grid"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Grid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={`p-2 ${
+                  viewMode === "list"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
             <button
-              onClick={() => setViewMode("grid")}
-              className={`p-2 rounded ${
-                viewMode === "grid"
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-muted"
-              }`}
+              onClick={handleCreateTicket}
+              className="bg-primary text-primary-foreground px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-primary/90"
             >
-              <Grid className="h-4 w-4" />
+              <Plus className="w-4 h-4" />
+              <span>New Ticket</span>
             </button>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-7 gap-4 mb-6">
+          <div className="bg-card text-card-foreground p-6 rounded-lg border">
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-sm text-muted-foreground">Total Tickets</p>
+          </div>
+          <div className="bg-card text-card-foreground p-6 rounded-lg border">
+            <div className="text-2xl font-bold text-red-600">{stats.open}</div>
+            <p className="text-sm text-muted-foreground">Open</p>
+          </div>
+          <div className="bg-card text-card-foreground p-6 rounded-lg border">
+            <div className="text-2xl font-bold text-yellow-600">
+              {stats.in_progress}
+            </div>
+            <p className="text-sm text-muted-foreground">In Progress</p>
+          </div>
+          <div className="bg-card text-card-foreground p-6 rounded-lg border">
+            <div className="text-2xl font-bold text-purple-600">
+              {stats.resolved}
+            </div>
+            <p className="text-sm text-muted-foreground">Resolved</p>
+          </div>
+          <div className="bg-card text-card-foreground p-6 rounded-lg border">
+            <div className="text-2xl font-bold text-orange-600">
+              {stats.reopened}
+            </div>
+            <p className="text-sm text-muted-foreground">Reopened</p>
+          </div>
+          <div className="bg-card text-card-foreground p-6 rounded-lg border">
+            <div className="text-2xl font-bold text-green-600">
+              {stats.closed}
+            </div>
+            <p className="text-sm text-muted-foreground">Closed</p>
+          </div>
+        </div>
+
+        {/* Tickets Display */}
+        {tickets.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">
+              No tickets found matching your criteria.
+            </p>
             <button
-              onClick={() => setViewMode("list")}
-              className={`p-2 rounded ${
-                viewMode === "list"
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-muted"
-              }`}
+              onClick={handleCreateTicket}
+              className="mt-4 bg-primary text-primary-foreground px-4 py-2 rounded-lg"
             >
-              <List className="h-4 w-4" />
+              Create your first ticket
             </button>
           </div>
-
-          <button
-            onClick={handleCreateTicket}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            New Ticket
-          </button>
-        </div>
+        ) : viewMode === "grid" ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {tickets.map((ticket: Ticket) => (
+              <TicketCard
+                key={ticket.id}
+                ticket={ticket}
+                onClick={() => handleViewTicket(ticket.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <TicketTable
+            tickets={tickets}
+            onTicketClick={(ticket: Ticket) => handleViewTicket(ticket.id)}
+            onEdit={(ticket: Ticket) => handleEditTicket(ticket.id)}
+            onDelete={async (ticket: Ticket) =>
+              await handleDeleteTicket(ticket.id)
+            }
+          />
+        )}
       </div>
-
-      {/* Error Display */}
-      {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-600">Error loading tickets: {error}</p>
-        </div>
-      )}
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className="bg-card text-card-foreground p-6 rounded-lg border">
-          <div className="text-2xl font-bold">{stats.total}</div>
-          <p className="text-sm text-muted-foreground">Total Tickets</p>
-        </div>
-        <div className="bg-card text-card-foreground p-6 rounded-lg border">
-          <div className="text-2xl font-bold text-red-600">{stats.open}</div>
-          <p className="text-sm text-muted-foreground">Open</p>
-        </div>
-        <div className="bg-card text-card-foreground p-6 rounded-lg border">
-          <div className="text-2xl font-bold text-yellow-600">
-            {stats.in_progress}
-          </div>
-          <p className="text-sm text-muted-foreground">In Progress</p>
-        </div>
-        <div className="bg-card text-card-foreground p-6 rounded-lg border">
-          <div className="text-2xl font-bold text-blue-600">
-            {stats.waiting}
-          </div>
-          <p className="text-sm text-muted-foreground">Waiting</p>
-        </div>
-        <div className="bg-card text-card-foreground p-6 rounded-lg border">
-          <div className="text-2xl font-bold text-green-600">
-            {stats.closed}
-          </div>
-          <p className="text-sm text-muted-foreground">Closed</p>
-        </div>
-      </div>
-
-      {/* Tickets Display */}
-      {tickets.length === 0 ? (
-        <div className="text-center py-12">
-          <div className="mx-auto w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-4">
-            <Plus className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-semibold mb-2">No tickets found</h3>
-          <p className="text-muted-foreground mb-4">
-            {filters.status || filters.priority || filters.search
-              ? "No tickets match your current filters."
-              : "Get started by creating your first support ticket."}
-          </p>
-          <button
-            onClick={handleCreateTicket}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Create First Ticket
-          </button>
-        </div>
-      ) : viewMode === "grid" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {tickets.map((ticket: Ticket) => (
-            <TicketCard
-              key={ticket.id}
-              ticket={ticket}
-              onClick={() => handleTicketClick(ticket.id)}
-            />
-          ))}
-        </div>
-      ) : (
-        <TicketTable
-          tickets={tickets}
-          onEdit={(ticket: Ticket) => handleEditTicket(ticket.id)}
-          onDelete={(ticket: Ticket) => handleDeleteTicket(ticket.id)}
-          onTicketClick={(ticket: Ticket) => handleTicketClick(ticket.id)}
-        />
-      )}
     </div>
   );
 }

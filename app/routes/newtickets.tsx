@@ -101,6 +101,7 @@ export async function action({ request }: Route.ActionArgs) {
         | "medium"
         | "high"
         | "critical",
+      // All new tickets start as "open" - workflow requires assignee/admin to move to "in_progress"
       status: "open" as const,
       created_by: session.user.id,
       assigned_to: assignedTo,
@@ -248,51 +249,48 @@ export default function NewTicketPage({
   };
 
   return (
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            Create New Ticket
-          </h1>
-          <p className="text-muted-foreground">
-            Submit a new support request and we'll get back to you as soon as
-            possible.
-          </p>
-        </div>
-
-        {/* Error Display */}
-        {(error || (actionData && !(actionData as any).success)) && (
-          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
-            <h3 className="font-semibold text-destructive mb-2">
-              Error Creating Ticket
-            </h3>
-            <p className="text-sm text-destructive/80">
-              {error || (actionData as any)?.error || "Failed to create ticket"}
-            </p>
-          </div>
-        )}
-
-        {/* Success Display */}
-        {actionData && (actionData as any).success && (
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-            <h3 className="font-semibold text-green-800 dark:text-green-200 mb-2">
-              Ticket Created Successfully!
-            </h3>
-            <p className="text-sm text-green-700 dark:text-green-300">
-              Your ticket has been created and assigned ID:{" "}
-              {(actionData as any).ticketId}
-            </p>
-          </div>
-        )}
-
-        <div className="bg-card rounded-lg shadow-sm border border-border p-6">
-          <TicketForm
-            onSubmit={handleSubmit}
-            isEditing={false}
-            assignableUsers={loaderData?.assignableUsers || []}
-            isSubmitting={isSubmitting}
-          />
-        </div>
+    <div className="max-w-full mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">
+          Create New Ticket
+        </h1>
+        <p className="text-muted-foreground">
+          Submit a new support request and we'll get back to you as soon as
+          possible.
+        </p>
       </div>
 
+      {/* Error Display */}
+      {(error || (actionData && !(actionData as any).success)) && (
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+          <h3 className="font-semibold text-destructive mb-2">
+            Error Creating Ticket
+          </h3>
+          <p className="text-sm text-destructive/80">
+            {error || (actionData as any)?.error || "Failed to create ticket"}
+          </p>
+        </div>
+      )}
+
+      {/* Success Display */}
+      {actionData && (actionData as any).success && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+          <h3 className="font-semibold text-green-800 dark:text-green-200 mb-2">
+            Ticket Created Successfully!
+          </h3>
+          <p className="text-sm text-green-700 dark:text-green-300">
+            Your ticket has been created and assigned ID:{" "}
+            {(actionData as any).ticketId}
+          </p>
+        </div>
+      )}
+
+      <TicketForm
+        onSubmit={handleSubmit}
+        isEditing={false}
+        assignableUsers={loaderData?.assignableUsers || []}
+        isSubmitting={isSubmitting}
+      />
+    </div>
   );
 }

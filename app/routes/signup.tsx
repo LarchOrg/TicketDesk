@@ -5,13 +5,6 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
 import { useAuth } from "~/contexts/AuthContext";
 import { supabase } from "~/lib/supabaseClient";
 import type { Route } from "./+types/signup";
@@ -64,7 +57,6 @@ export default function SignupPage() {
           options: {
             data: {
               full_name: formData.name,
-              role: formData.role,
             },
           },
         }
@@ -83,7 +75,7 @@ export default function SignupPage() {
           id: authData.user.id,
           name: formData.name,
           email: formData.email,
-          role: formData.role,
+          role: "user",
           created_at: new Date().toISOString(),
         },
       ]);
@@ -100,12 +92,8 @@ export default function SignupPage() {
         );
         return;
       }
-
-      if (formData.role === "admin") {
         navigate("/");
-      } else {
-        navigate("/tickets");
-      }
+
     } catch (err: any) {
       console.error("Signup error:", err);
       setError(err.message || "An error occurred during signup");
@@ -120,7 +108,7 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-background dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <Card>
           <CardHeader className="space-y-1">
@@ -164,44 +152,6 @@ export default function SignupPage() {
                   placeholder="Enter your email"
                   required
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="role">Account Type</Label>
-                <Select
-                  value={formData.role}
-                  onValueChange={(value) => handleChange("role", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select account type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="user">
-                      <div className="flex flex-col">
-                        <span className="font-medium">User</span>
-                        <span className="text-xs text-muted-foreground">
-                          Create and track support tickets
-                        </span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="agent">
-                      <div className="flex flex-col">
-                        <span className="font-medium">Support Agent</span>
-                        <span className="text-xs text-muted-foreground">
-                          Handle and resolve support tickets
-                        </span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="admin">
-                      <div className="flex flex-col">
-                        <span className="font-medium">Administrator</span>
-                        <span className="text-xs text-muted-foreground">
-                          Full system access and management
-                        </span>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
 
               <div className="space-y-2">

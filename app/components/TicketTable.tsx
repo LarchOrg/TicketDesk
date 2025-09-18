@@ -46,18 +46,9 @@ export default function TicketTable({
   const [selectedTickets, setSelectedTickets] = useState<string[]>([]);
   const [showActions, setShowActions] = useState<string | null>(null);
 
+  console.log(tickets, "tickets in table");
+
   const columns: Column[] = [
-    {
-      key: "id",
-      label: "ID",
-      sortable: true,
-      width: "w-20",
-      render: (value) => (
-        <span className="font-mono text-xs text-gray-500 dark:text-gray-400">
-          #{getShortId(value)}
-        </span>
-      ),
-    },
     {
       key: "title",
       label: "Title",
@@ -68,10 +59,18 @@ export default function TicketTable({
           <p className="font-medium text-gray-900 dark:text-white truncate">
             {value}
           </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-            {_ticket.description?.replace(/<[^>]*>/g, "").substring(0, 60)}...
-          </p>
         </div>
+      ),
+    },
+    {
+      key: "id",
+      label: "ID",
+      sortable: true,
+      width: "w-20",
+      render: (value) => (
+        <span className="font-mono text-xs text-gray-500 dark:text-gray-400">
+          #{getShortId(value)}
+        </span>
       ),
     },
     {
@@ -100,7 +99,7 @@ export default function TicketTable({
       ),
     },
     {
-      key: "creator_name",
+      key: "created_by",
       label: "Creator",
       sortable: true,
       width: "w-32",

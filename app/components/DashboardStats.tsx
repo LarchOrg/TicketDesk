@@ -72,11 +72,12 @@ function StatsCard({ title, value, icon: Icon, color, trend }: StatsCardProps) {
 interface DashboardStatsProps {
   stats: TicketStats;
   trends?: {
-    total: { value: number; isPositive: boolean };
-    open: { value: number; isPositive: boolean };
-    in_progress: { value: number; isPositive: boolean };
-    closed: { value: number; isPositive: boolean };
-    waiting?: { value: number; isPositive: boolean };
+    total?: { value: number; isPositive: boolean };
+    open?: { value: number; isPositive: boolean };
+    in_progress?: { value: number; isPositive: boolean };
+    resolved?: { value: number; isPositive: boolean };
+    reopened?: { value: number; isPositive: boolean };
+    closed?: { value: number; isPositive: boolean };
   };
 }
 
@@ -104,7 +105,21 @@ export default function DashboardStats({ stats, trends }: DashboardStatsProps) {
       trend: trends?.in_progress,
     },
     {
-      title: "Completed",
+      title: "Resolved",
+      value: stats.resolved,
+      icon: CheckCircle2,
+      color: "bg-gradient-to-br from-purple-500 to-purple-600",
+      trend: trends?.resolved,
+    },
+    {
+      title: "Reopened",
+      value: stats.reopened,
+      icon: AlertTriangle,
+      color: "bg-gradient-to-br from-orange-500 to-orange-600",
+      trend: trends?.reopened,
+    },
+    {
+      title: "Closed",
       value: stats.closed,
       icon: CheckCircle2,
       color: "bg-gradient-to-br from-green-500 to-green-600",

@@ -55,11 +55,27 @@ export async function loader({ request }: Route.LoaderArgs) {
 
     if (ticketsError || statsError) {
       console.error("❌ Dashboard query errors:", { ticketsError, statsError });
-      return {
-        tickets: [],
-        stats: { total: 0, open: 0, in_progress: 0, waiting: 0, closed: 0 },
-        error: ticketsError?.message || statsError?.message || "Unknown error",
-      };
+      return new Response(
+        JSON.stringify({
+          tickets: [],
+          stats: {
+            total: 0,
+            open: 0,
+            in_progress: 0,
+            resolved: 0,
+            reopened: 0,
+            closed: 0,
+          },
+          error:
+            ticketsError?.message || statsError?.message || "Unknown error",
+        }),
+        {
+          status: 500,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
     }
 
     // Transform tickets data
@@ -88,8 +104,11 @@ export async function loader({ request }: Route.LoaderArgs) {
           case "in_progress":
             acc.in_progress++;
             break;
-          case "waiting":
-            acc.waiting++;
+          case "resolved":
+            acc.resolved++;
+            break;
+          case "reopened":
+            acc.reopened++;
             break;
           case "closed":
             acc.closed++;
@@ -97,7 +116,14 @@ export async function loader({ request }: Route.LoaderArgs) {
         }
         return acc;
       },
-      { total: 0, open: 0, in_progress: 0, waiting: 0, closed: 0 }
+      {
+        total: 0,
+        open: 0,
+        in_progress: 0,
+        resolved: 0,
+        reopened: 0,
+        closed: 0,
+      }
     );
 
     console.log("✅ Dashboard data loaded:", {
@@ -117,19 +143,33 @@ export async function loader({ request }: Route.LoaderArgs) {
         },
       }
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("❌ Dashboard loader exception:", error);
 
-    // If it's already a Response (like redirect), re-throw it
     if (error instanceof Response) {
       throw error;
     }
 
-    return {
-      tickets: [],
-      stats: { total: 0, open: 0, in_progress: 0, waiting: 0, closed: 0 },
-      error: `Unexpected error: ${error instanceof Error ? error.message : "Unknown error"}`,
-    };
+    return new Response(
+      JSON.stringify({
+        tickets: [],
+        stats: {
+          total: 0,
+          open: 0,
+          in_progress: 0,
+          resolved: 0,
+          reopened: 0,
+          closed: 0,
+        },
+        error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
+      }),
+      {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
   }
 }
 
@@ -211,7 +251,7 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
               <span className="font-medium">{stats.in_progress}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Closed Today</span>
+              <span className="text-muted-foreground">Closed</span>
               <span className="font-medium">{stats.closed}</span>
             </div>
           </div>

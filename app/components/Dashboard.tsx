@@ -41,7 +41,8 @@ export default function Dashboard({
     all: tickets.length,
     open: tickets.filter((t) => t.status === "open").length,
     in_progress: tickets.filter((t) => t.status === "in_progress").length,
-    waiting: tickets.filter((t) => t.status === "waiting").length,
+    resolved: tickets.filter((t) => t.status === "resolved").length,
+    reopened: tickets.filter((t) => t.status === "reopened").length,
     closed: tickets.filter((t) => t.status === "closed").length,
   };
 
