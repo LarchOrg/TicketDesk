@@ -5,10 +5,11 @@ import { supabase } from "../lib/supabaseClient";
 
 type Profile = {
   id: string;
-  name: string;
+  name?: string;
   email: string;
-  role: "user" | "admin" | "agent";
+  role?: string;
   created_at: string;
+  updated_at?: string;
 };
 
 type AuthContextType = {
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Load user profile
   const loadProfile = async (userId: string) => {
     try {
+      console.log("Loading profile for user:", userId);
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
@@ -52,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      console.log("Profile loaded:", data);
       setProfile(data || null);
     } catch (error) {
       console.error("Profile loading exception:", error);

@@ -1,6 +1,6 @@
 import { AlertCircle, Upload, X } from "lucide-react";
 import React, { useState } from "react";
-import type { FormState, TicketFormData } from "~/lib/types";
+import type { FormState, Profile, TicketFormData } from "~/lib/types";
 import { RichTextEditor } from "./RichTextEditor";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -14,19 +14,12 @@ import {
   SelectValue,
 } from "./ui/select";
 
-interface AssignableUser {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-}
-
 interface TicketFormProps {
   onSubmit: (data: TicketFormData) => Promise<void>;
   initialData?: Partial<TicketFormData>;
   isEditing?: boolean;
   className?: string;
-  assignableUsers?: AssignableUser[];
+  assignableUsers?: Profile[];
   isSubmitting?: boolean;
 }
 
@@ -197,7 +190,7 @@ export default function TicketForm({
                       <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
                           <span className="text-xs text-white font-medium">
-                            {user.name.charAt(0).toUpperCase()}
+                            {user.name?.charAt(0).toUpperCase()}
                           </span>
                         </div>
                         <div className="flex flex-col">

@@ -7,6 +7,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { useAuth } from "~/contexts/AuthContext";
 import { supabase } from "~/lib/supabaseClient";
+import { createServices } from "~/services";
 import type { Route } from "./+types/signup";
 
 export function meta({}: Route.MetaArgs) {
@@ -70,18 +71,54 @@ export default function SignupPage() {
         throw new Error("Failed to create user account");
       }
 
-      const { error: profileError } = await supabase.from("profiles").insert([
-        {
+      const services = createServices(supabase);
+
+      const existingProfile = await services.users.getUserById(
+        authData.user.id
+      );
+
+      let profileResult: { success: boolean; error?: any } = { success: false };
+
+      if (existingProfile) {
+        console.log("Profile already exists:", existingProfile);
+
+        const updateResult = await services.users.updateUserProfile(
+          authData.user.id,
+          {
+            name: formData.name,
+          }
+        );
+
+        if (updateResult.success) {
+          console.log("Profile updated successfully with name");
+          profileResult = { success: true };
+        } else {
+          console.error(
+            "Failed to update profile with name:",
+            updateResult.error
+          );
+          profileResult = { success: false, error: updateResult.error };
+        }
+      } else {
+        console.log("Profile doesn't exist, creating new one...");
+        profileResult = await services.users.createUserProfile({
           id: authData.user.id,
           name: formData.name,
           email: formData.email,
           role: "user",
-          created_at: new Date().toISOString(),
-        },
-      ]);
+        });
 
-      if (profileError) {
-        console.error("Profile creation error:", profileError);
+        if (!profileResult.success) {
+          console.error(
+            "Profile creation error via service:",
+            profileResult.error
+          );
+        } else {
+          console.log(
+            "Profile created successfully for user:",
+            authData.user.id
+          );
+        }
       }
 
       await refreshSession();
@@ -92,8 +129,10 @@ export default function SignupPage() {
         );
         return;
       }
-        navigate("/");
 
+      if (profileResult.success) {
+        navigate("/");
+      }
     } catch (err: any) {
       console.error("Signup error:", err);
       setError(err.message || "An error occurred during signup");
@@ -108,7 +147,7 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <Card>
           <CardHeader className="space-y-1">

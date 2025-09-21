@@ -11,7 +11,8 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate, useSubmit } from "react-router";
+import { redirect, useNavigate, useNavigation, useSubmit } from "react-router";
+import { RouteSkeleton } from "~/components/LoadingComponents";
 import PriorityBadge from "~/components/PriorityBadge";
 import { StatusBadge, StatusTransition } from "~/components/StatusTransition";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
@@ -31,115 +32,75 @@ import { useAuth } from "~/contexts/AuthContext";
 import { canTransitionStatus, useRolePermissions } from "~/lib/role-utils";
 import { createSupabaseServerClient } from "~/lib/supabase-server";
 import type { TicketPriority, TicketStatus } from "~/lib/types";
+import { createServices } from "~/services";
 import type { Route } from "./+types/tickets.$ticketId";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { supabase: serverSupabase, response } =
-    createSupabaseServerClient(request);
+  const { supabase, response } = createSupabaseServerClient(request);
 
   try {
-    // Verify authentication
     const {
       data: { user },
       error: userError,
-    } = await serverSupabase.auth.getUser();
+    } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      throw new Response("Unauthorized", {
-        status: 401,
-        headers: { Location: "/login" },
-      });
+      return redirect("/login", { headers: response.headers });
     }
 
-    // Fetch ticket with related data
-    const { data: ticket, error: ticketError } = await serverSupabase
-      .from("tickets")
-      .select(
-        `
-        *,
-        created_by_profile:profiles!tickets_created_by_fkey(id, name, email, avatar_url, role),
-        assigned_to_profile:profiles!tickets_assigned_to_fkey(id, name, email, avatar_url, role)
-      `
-      )
-      .eq("id", params.ticketId)
-      .single();
-
-    if (ticketError || !ticket) {
-      throw new Response("Ticket not found", { status: 404 });
+    if (!params.ticketId) {
+      return { error: "Ticket ID is required" };
     }
 
-    // Fetch comments with author profiles
-    const { data: comments } = await serverSupabase
-      .from("comments")
-      .select(
-        `
-        *,
-        author:profiles!comments_user_id_fkey(id, name, email, avatar_url, role)
-      `
-      )
-      .eq("ticket_id", params.ticketId)
-      .order("created_at", { ascending: true });
+    const services = createServices(supabase);
 
-    // Fetch attachments
-    const { data: attachments } = await serverSupabase
-      .from("attachments")
-      .select("*")
-      .eq("ticket_id", params.ticketId)
-      .order("created_at", { ascending: false });
+    const [ticket, comments, attachments, assignableUsers] = await Promise.all([
+      services.tickets.getTicketById(params.ticketId),
+      services.comments.getCommentsByTicketId(params.ticketId),
+      services.attachments.getAttachmentsByTicketId(params.ticketId),
+      services.users.getAssignableUsers(),
+    ]);
 
-    // Fetch assignable users (agents and admins)
-    const { data: assignableUsers } = await serverSupabase
-      .from("profiles")
-      .select("id, name, email, avatar_url, role")
-      .in("role", ["agent", "admin"])
-      .order("name");
+    if (!ticket) {
+      return { error: "Ticket not found" };
+    }
 
-    return Response.json(
-      {
-        ticket,
-        comments: comments || [],
-        attachments: attachments || [],
-        assignableUsers: assignableUsers || [],
-      },
-      { headers: response.headers }
-    );
+    return {
+      ticket,
+      comments,
+      attachments,
+      assignableUsers,
+    };
   } catch (error: any) {
     console.error("Loader error:", error);
-    throw new Response("Internal Server Error", { status: 500 });
+    return { error: "Internal Server Error" };
   }
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
-  const { supabase: serverSupabase, response } =
-    createSupabaseServerClient(request);
+  const { supabase, response } = createSupabaseServerClient(request);
   const formData = await request.formData();
   const actionType = formData.get("actionType") as string;
 
   try {
-    // Verify authentication
     const {
       data: { user },
       error: userError,
-    } = await serverSupabase.auth.getUser();
+    } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return Response.json(
-        { success: false, message: "Authentication required" },
-        { status: 401, headers: response.headers }
-      );
+      return { success: false, message: "Authentication required" };
     }
 
-    const { data: profile } = await serverSupabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+    const services = createServices(supabase);
 
+    const profile = await services.users.getUserById(user.id);
     if (!profile) {
-      return Response.json(
-        { success: false, message: "User profile not found" },
-        { status: 404, headers: response.headers }
-      );
+      return { success: false, message: "User profile not found" };
+    }
+
+    if (!params.ticketId) {
+      return { success: false, message: "Ticket ID is required" };
     }
 
     if (actionType === "updateTicket") {
@@ -150,120 +111,104 @@ export async function action({ request, params }: Route.ActionArgs) {
         assigned_to: (formData.get("assigned_to") as string) || null,
       };
 
-      const { error } = await serverSupabase
-        .from("tickets")
-        .update(updates)
-        .eq("id", params.ticketId);
-
-      if (error) throw error;
-
-      return Response.json(
-        { success: true, message: "Ticket updated successfully" },
-        { headers: response.headers }
+      const result = await services.tickets.updateTicket(
+        params.ticketId,
+        updates
       );
+
+      if (!result.success) {
+        return {
+          success: false,
+          message: result.error || "Failed to update ticket",
+        };
+      }
+
+      return { success: true, message: "Ticket updated successfully" };
     }
 
-    if (actionType === "statusTransition") {
+    if (actionType === "transitionStatus") {
       const newStatus = formData.get("newStatus") as TicketStatus;
       const transitionLabel = formData.get("transitionLabel") as string;
 
-      const { data: currentTicket } = await serverSupabase
-        .from("tickets")
-        .select("status, created_by, assigned_to")
-        .eq("id", params.ticketId)
-        .single();
-
-      if (!currentTicket) {
-        return Response.json(
-          { success: false, message: "Ticket not found" },
-          { status: 404, headers: response.headers }
-        );
+      const ticket = await services.tickets.getTicketById(params.ticketId);
+      if (!ticket) {
+        return { success: false, message: "Ticket not found" };
       }
 
       const canTransition = canTransitionStatus(
-        currentTicket.status as TicketStatus,
+        ticket.status,
         newStatus,
         profile.role as any,
         user.id,
-        currentTicket
+        {
+          created_by: ticket.created_by,
+          assigned_to: ticket.assigned_to,
+        }
       );
 
       if (!canTransition) {
-        return Response.json(
-          {
-            success: false,
-            message: `You cannot ${transitionLabel.toLowerCase()} this ticket`,
-          },
-          { status: 403, headers: response.headers }
-        );
+        return {
+          success: false,
+          message: `You cannot ${transitionLabel.toLowerCase()} this ticket`,
+        };
       }
 
-      // Update ticket status
-      const { error } = await serverSupabase
-        .from("tickets")
-        .update({
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", params.ticketId);
-
-      if (error) throw error;
-      console.log(error, 'Error while status change')
-
-      // Add a system comment about the status change
-      await serverSupabase.from("comments").insert([
-        {
-          ticket_id: params.ticketId,
-          user_id: user.id,
-          content: `Ticket status changed to ${newStatus}`,
-          comment_type: "system",
-          is_internal: false,
-        },
-      ]);
-
-      return Response.json(
-        {
-          success: true,
-          message: `Ticket ${transitionLabel.toLowerCase()}ed successfully`,
-        },
-        { headers: response.headers }
+      const statusResult = await services.tickets.updateTicketStatus(
+        params.ticketId,
+        newStatus
       );
+
+      if (!statusResult.success) {
+        return {
+          success: false,
+          message: statusResult.error || "Failed to update status",
+        };
+      }
+
+      await services.comments.createComment({
+        ticket_id: params.ticketId,
+        user_id: user.id,
+        content: `Ticket status changed to ${newStatus}`,
+        comment_type: "system",
+        is_internal: false,
+      });
+
+      return {
+        success: true,
+        message: `Ticket ${transitionLabel.toLowerCase()} successfully`,
+      };
     }
 
     if (actionType === "addComment") {
-      const commentData = {
+      const content = formData.get("content") as string;
+      const isInternal = formData.get("isInternal") === "true";
+
+      if (!content?.trim()) {
+        return { success: false, message: "Comment content is required" };
+      }
+
+      const result = await services.comments.createComment({
         ticket_id: params.ticketId,
         user_id: user.id,
-        content: formData.get("content") as string,
-        comment_type: (formData.get("comment_type") as string) || "comment",
-        is_internal: formData.get("is_internal") === "true",
-      };
+        content: content.trim(),
+        comment_type: "comment",
+        is_internal: isInternal,
+      });
 
-      const { error } = await serverSupabase
-        .from("comments")
-        .insert([commentData]);
+      if (!result.success) {
+        return {
+          success: false,
+          message: result.error || "Failed to add comment",
+        };
+      }
 
-      if (error) throw error;
-
-      return Response.json(
-        { success: true, message: "Comment added successfully" },
-        { headers: response.headers }
-      );
+      return { success: true, message: "Comment added successfully" };
     }
 
-    return Response.json(
-      { success: false, message: "Invalid action" },
-      { status: 400, headers: response.headers }
-    );
+    return { success: false, message: "Invalid action type" };
   } catch (error: any) {
     console.error("Action error:", error);
-    return Response.json(
-      {
-        success: false,
-        message: error.message || "An error occurred",
-      },
-      { status: 500, headers: response.headers }
-    );
+    return { success: false, message: "An unexpected error occurred" };
   }
 }
 
@@ -275,6 +220,7 @@ export default function TicketDetailsPage({
   const { user } = useAuth();
   const permissions = useRolePermissions();
   const navigate = useNavigate();
+  const navigation = useNavigation();
   const submit = useSubmit();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -310,7 +256,6 @@ export default function TicketDetailsPage({
           setNewComment("");
           setCommentType("comment");
         }
-
       } else if (typedActionData.message) {
         alert(typedActionData.message);
       }
@@ -385,7 +330,9 @@ export default function TicketDetailsPage({
     return new Date(dateString).toLocaleString();
   };
 
-  return (
+  return navigation.state == "loading" ? (
+    <RouteSkeleton />
+  ) : (
     <div className="min-h-screen bg-background">
       <div className="max-w-full mx-auto p-6">
         {/* Header */}

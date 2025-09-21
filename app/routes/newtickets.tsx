@@ -1,9 +1,18 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSubmit } from "react-router";
+import { redirect, useNavigate, useNavigation, useSubmit } from "react-router";
+import { FormSkeleton } from "~/components/LoadingComponents";
 import TicketForm from "~/components/TicketForm";
 import { createSupabaseServerClient } from "~/lib/supabase-server";
-import type { TicketFormData } from "~/lib/types";
+import type { Profile, TicketFormData } from "~/lib/types";
+import { createServices } from "~/services";
 import type { Route } from "./+types/newtickets";
+
+export const meta = () => {
+  return [
+    { title: "Create New Ticket - TicketDesk" },
+    { name: "description", content: "Submit a new support ticket" },
+  ];
+};
 
 export async function loader({ request }: Route.LoaderArgs) {
   const { supabase, response } = createSupabaseServerClient(request);
@@ -15,39 +24,20 @@ export async function loader({ request }: Route.LoaderArgs) {
     } = await supabase.auth.getSession();
 
     if (sessionError || !session) {
-      throw new Response("Unauthorized", { status: 401 });
+      return redirect("/login", { headers: response.headers });
     }
 
-    const { data: assignableUsers, error: usersError } = await supabase
-      .from("profiles")
-      .select(
-        `
-        id,
-        name,
-        email,
-        role
-      `
-      )
-      .in("role", ["admin", "agent"])
-      .order("name");
+    const services = createServices(supabase);
 
-    if (usersError) {
-      console.error("❌ Failed to fetch assignable users:", usersError);
-      return Response.json(
-        {
-          assignableUsers: [],
-          currentUser: session.user,
-        },
-        { headers: response.headers }
-      );
-    }
+    const assignableUsers: Profile[] =
+      await services.users.getAssignableUsers();
 
     return {
-      assignableUsers: assignableUsers || [],
+      assignableUsers,
       currentUser: session.user,
     };
   } catch (error) {
-    console.error("❌ Loader error:", error);
+    console.error("Loader error:", error);
     return {
       assignableUsers: [],
       currentUser: null,
@@ -66,7 +56,7 @@ export async function action({ request }: Route.ActionArgs) {
     } = await supabase.auth.getSession();
 
     if (sessionError || !session) {
-      console.error("❌ Authentication error:", sessionError);
+      console.error("Authentication error:", sessionError);
       return Response.json(
         {
           success: false,
@@ -76,22 +66,13 @@ export async function action({ request }: Route.ActionArgs) {
       );
     }
 
-    // Log session user safely (some session shapes may omit fields)
-    console.log("🔐 Session user:", {
-      id: session.user?.id ?? null,
-      email: session.user?.email ?? null,
-      role: (session.user as any)?.role ?? null,
-    });
-
-    // Parse form data after confirming session
     const formData = await request.formData();
 
-    // Normalize assigned_to value
     const rawAssigned = formData.get("assigned_to");
-    let assignedTo: string | null =
+    let assignedTo: string | undefined =
       rawAssigned && String(rawAssigned).trim() !== ""
         ? String(rawAssigned).trim()
-        : null;
+        : undefined;
 
     const ticketData = {
       title: String(formData.get("title") || "").trim(),
@@ -101,98 +82,42 @@ export async function action({ request }: Route.ActionArgs) {
         | "medium"
         | "high"
         | "critical",
-      // All new tickets start as "open" - workflow requires assignee/admin to move to "in_progress"
-      status: "open" as const,
       created_by: session.user.id,
       assigned_to: assignedTo,
     };
 
-    console.log("🎫 Creating new ticket:", ticketData);
-
-    // Validate required fields
     if (!ticketData.title || !ticketData.description) {
-      return Response.json(
-        {
-          success: false,
-          error: "Title and description are required",
-        },
-        { headers: response.headers }
-      );
-    }
-
-    // Ensure the user exists in profiles table
-    const { data: userProfile, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, name, email, role")
-      .eq("id", session.user.id)
-      .single();
-
-    if (profileError || !userProfile) {
-      console.error("❌ User profile not found:", profileError);
-      return Response.json(
-        {
-          success: false,
-          error:
-            "User profile not found. Please ensure your profile exists in the system.",
-        },
-        { headers: response.headers }
-      );
-    }
-
-    console.log("👤 User profile found:", userProfile);
-
-    // Insert the ticket into the database
-    const { data: newTicket, error } = await supabase
-      .from("tickets")
-      .insert([
-        {
-          title: ticketData.title,
-          description: ticketData.description,
-          priority: ticketData.priority,
-          status: ticketData.status,
-          created_by: ticketData.created_by,
-          assigned_to: ticketData.assigned_to ?? null,
-        },
-      ])
-      .select(
-        `
-        *,
-        created_by_profile:profiles!tickets_created_by_fkey(id, name, email),
-        assigned_to_profile:profiles!tickets_assigned_to_fkey(id, name, email)
-      `
-      )
-      .single();
-
-    if (error) {
-      console.error("❌ Database error creating ticket:", error);
-      return Response.json(
-        {
-          success: false,
-          error: `Failed to create ticket: ${error.message}`,
-        },
-        { headers: response.headers }
-      );
-    }
-
-    console.log("✅ Ticket created successfully:", newTicket);
-
-    return Response.json(
-      {
-        success: true,
-        ticketId: newTicket.id,
-        ticket: newTicket,
-      },
-      { headers: response.headers }
-    );
-  } catch (error) {
-    console.error("❌ Unexpected error creating ticket:", error);
-    return Response.json(
-      {
+      return {
         success: false,
-        error: `Unexpected error: ${error instanceof Error ? error.message : "Unknown error"}`,
-      },
-      { headers: response.headers }
-    );
+        error: "Title and description are required.",
+      };
+    }
+
+    const services = createServices(supabase);
+
+    const result = await services.tickets.createTicket(ticketData);
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to create ticket",
+      };
+    }
+
+    console.log("✅ Ticket created successfully:", result.ticket?.id);
+
+    return {
+      success: true,
+      message: "Ticket created successfully!",
+      ticketId: result.ticket?.id,
+    };
+  } catch (error) {
+    console.error("Action error:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "An unexpected error occurred",
+    };
   }
 }
 
@@ -202,49 +127,60 @@ export default function NewTicketPage({
 }: Route.ComponentProps) {
   const navigate = useNavigate();
   const submit = useSubmit();
+  const navigation = useNavigation();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Handle action results
+  const { assignableUsers } = loaderData;
+
+  if (navigation.state == "loading") {
+    return <FormSkeleton />;
+  }
+
   useEffect(() => {
     if (actionData) {
       setIsSubmitting(false);
 
-      if ((actionData as any).success) {
-        console.log(
-          "✅ Ticket created successfully:",
-          (actionData as any).ticketId
-        );
-        // Navigate to the tickets page (or specific ticket) after a short delay
-        setTimeout(() => {
+      if ("success" in actionData && actionData.success) {
+        if ("ticketId" in actionData && actionData.ticketId) {
+          navigate(`/tickets/${actionData.ticketId}`);
+        } else {
           navigate("/tickets");
-        }, 2000); // Give user time to see success message
-      } else if ((actionData as any).error) {
-        setError((actionData as any).error);
+        }
+      } else {
+        const errorMessage =
+          "error" in actionData ? actionData.error : "Failed to create ticket";
+        setError(errorMessage || "Failed to create ticket");
       }
     }
   }, [actionData, navigate]);
 
-  const handleSubmit = async (ticketData: TicketFormData) => {
-    try {
-      setError(null);
-      setIsSubmitting(true);
-      console.log("📝 Submitting ticket form:", ticketData);
+  const handleSubmit = async (formData: TicketFormData) => {
+    setError(null);
+    setIsSubmitting(true);
 
-      const formData = new FormData();
-      formData.append("title", ticketData.title);
-      formData.append("description", ticketData.description || "");
-      formData.append("priority", ticketData.priority);
-      if (ticketData.assigned_to) {
-        formData.append("assigned_to", ticketData.assigned_to);
+    try {
+      const submitFormData = new FormData();
+      submitFormData.append("title", formData.title);
+      submitFormData.append("description", formData.description);
+      submitFormData.append("priority", formData.priority);
+
+      if (formData.assigned_to) {
+        submitFormData.append("assigned_to", formData.assigned_to);
       }
-      submit(formData, { method: "POST" });
+
+      if (formData.attachments && formData.attachments.length > 0) {
+        formData.attachments.forEach((file, index) => {
+          submitFormData.append(`attachment_${index}`, file);
+        });
+      }
+
+      submit(submitFormData, { method: "post" });
     } catch (err) {
-      console.error("❌ Error submitting form:", err);
+      setIsSubmitting(false);
       setError(
         err instanceof Error ? err.message : "An unexpected error occurred"
       );
-      setIsSubmitting(false);
     }
   };
 
@@ -288,7 +224,7 @@ export default function NewTicketPage({
       <TicketForm
         onSubmit={handleSubmit}
         isEditing={false}
-        assignableUsers={loaderData?.assignableUsers || []}
+        assignableUsers={assignableUsers}
         isSubmitting={isSubmitting}
       />
     </div>

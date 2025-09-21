@@ -271,10 +271,10 @@ export default function TicketTable({
 
   return (
     <div
-      className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden ${className}`}
+      className={`bg-white dark:bg-background rounded-xl border border-border dark:border-border overflow-hidden ${className}`}
     >
       {/* Table Header */}
-      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="px-6 py-4 border-b border-border dark:bg-background">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <label className="flex items-center">
@@ -282,7 +282,7 @@ export default function TicketTable({
                 type="checkbox"
                 checked={selectedTickets.length === tickets.length}
                 onChange={(e) => handleSelectAll(e.target.checked)}
-                className="w-4 h-4 text-blue-600 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500"
+                className="w-4 h-4 text-blue-600 border-border dark:border-border rounded"
               />
               <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
                 {selectedTickets.length > 0

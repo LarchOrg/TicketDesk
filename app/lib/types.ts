@@ -177,12 +177,16 @@ export interface TicketStats {
 }
 
 export interface TicketFilters {
-  status: string;
-  priority: string;
-  search: string;
+  status?: string;
+  priority?: string;
+  search?: string;
   category?: string;
   assigned_to?: string;
   created_by?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+  limit?: number;
+  offset?: number;
 }
 
 export interface TicketQuery {

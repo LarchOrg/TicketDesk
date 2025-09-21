@@ -1,199 +1,92 @@
-import { useNavigate } from "react-router";
+import { Plus } from "lucide-react";
+import { redirect, useNavigate, useNavigation } from "react-router";
 import DashboardStats from "~/components/DashboardStats";
+import { DashboardSkeleton } from "~/components/LoadingComponents";
 import TicketCard from "~/components/TicketCard";
+import { Button } from "~/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { createSupabaseServerClient } from "~/lib/supabase-server";
-import type { Ticket, TicketStats } from "~/lib/types";
+import type { Ticket } from "~/lib/types";
+import { createServices } from "~/services";
 import type { Route } from "./+types/dashboard";
 
+export const meta = () => {
+  return [
+    { title: "Dashboard - TicketDesk" },
+    {
+      name: "description",
+      content: "View your ticket dashboard and recent activity",
+    },
+  ];
+};
+
 export async function loader({ request }: Route.LoaderArgs) {
-  console.log("🔍 Dashboard loader starting...");
+  const { supabase, response } = createSupabaseServerClient(request);
+
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (sessionError || !session) {
+    return redirect("/login", { headers: response.headers });
+  }
+
+  const services = createServices(supabase);
 
   try {
-    // Create server-side Supabase client with cookie handling
-    const { supabase, response } = createSupabaseServerClient(request);
+    const [tickets, stats] = await Promise.all([
+      services.tickets.getRecentTickets(10),
+      services.tickets.getTicketStats(),
+    ]);
 
-    // Check authentication
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError) {
-      console.error("❌ Session error in dashboard loader:", sessionError);
-      throw new Response("Authentication error", { status: 401 });
-    }
-
-    if (!session) {
-      console.log("ℹ️ No session found, redirecting to login");
-      throw new Response("Unauthorized", {
-        status: 302,
-        headers: {
-          Location: "/login",
-        },
-      });
-    }
-
-    console.log("✅ Dashboard server session found for user:", session.user.id);
-
-    // Fetch recent tickets (last 10)
-    const { data: ticketsData, error: ticketsError } = await supabase
-      .from("tickets")
-      .select(
-        `
-        *,
-        created_by_profile:profiles!tickets_created_by_fkey(name, email),
-        assigned_to_profile:profiles!tickets_assigned_to_fkey(name, email)
-      `
-      )
-      .order("created_at", { ascending: false })
-      .limit(10);
-
-    // Fetch ticket statistics
-    const { data: statsData, error: statsError } = await supabase
-      .from("tickets")
-      .select("status");
-
-    if (ticketsError || statsError) {
-      console.error("❌ Dashboard query errors:", { ticketsError, statsError });
-      return new Response(
-        JSON.stringify({
-          tickets: [],
-          stats: {
-            total: 0,
-            open: 0,
-            in_progress: 0,
-            resolved: 0,
-            reopened: 0,
-            closed: 0,
-          },
-          error:
-            ticketsError?.message || statsError?.message || "Unknown error",
-        }),
-        {
-          status: 500,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    }
-
-    // Transform tickets data
-    const tickets: Ticket[] = (ticketsData || []).map((ticket: any) => ({
-      id: ticket.id,
-      title: ticket.title,
-      description: ticket.description,
-      status: ticket.status,
-      priority: ticket.priority,
-      created_at: ticket.created_at,
-      updated_at: ticket.updated_at,
-      created_by: ticket.created_by,
-      assigned_to: ticket.assigned_to,
-      created_by_profile: ticket.created_by_profile,
-      assigned_to_profile: ticket.assigned_to_profile,
-    }));
-
-    // Calculate stats
-    const stats: TicketStats = (statsData || []).reduce(
-      (acc, ticket) => {
-        acc.total++;
-        switch (ticket.status) {
-          case "open":
-            acc.open++;
-            break;
-          case "in_progress":
-            acc.in_progress++;
-            break;
-          case "resolved":
-            acc.resolved++;
-            break;
-          case "reopened":
-            acc.reopened++;
-            break;
-          case "closed":
-            acc.closed++;
-            break;
-        }
-        return acc;
-      },
-      {
+    return { tickets, stats, error: null };
+  } catch (error) {
+    console.error("Dashboard loader error:", error);
+    return {
+      tickets: [],
+      stats: {
         total: 0,
         open: 0,
         in_progress: 0,
         resolved: 0,
         reopened: 0,
         closed: 0,
-      }
-    );
-
-    console.log("✅ Dashboard data loaded:", {
-      ticketCount: tickets.length,
-      stats,
-    });
-
-    return new Response(
-      JSON.stringify({
-        tickets,
-        stats,
-      }),
-      {
-        headers: {
-          "Content-Type": "application/json",
-          ...Object.fromEntries(response.headers.entries()),
-        },
-      }
-    );
-  } catch (error: unknown) {
-    console.error("❌ Dashboard loader exception:", error);
-
-    if (error instanceof Response) {
-      throw error;
-    }
-
-    return new Response(
-      JSON.stringify({
-        tickets: [],
-        stats: {
-          total: 0,
-          open: 0,
-          in_progress: 0,
-          resolved: 0,
-          reopened: 0,
-          closed: 0,
-        },
-        error: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
-      }),
-      {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+      },
+      error: "Failed to load dashboard data",
+    };
   }
 }
 
 export default function DashboardPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
+  const navigation = useNavigation();
 
-  // Parse the loader data if it's a Response
-  const data =
-    typeof loaderData === "string" ? JSON.parse(loaderData) : loaderData;
-  const { tickets, stats, error } = data;
+  if (loaderData === undefined) {
+    return <DashboardSkeleton />;
+  }
+
+  const { tickets, stats, error } = loaderData;
 
   const handleCreateTicket = () => {
-    navigate("/tickets/new");
+    navigate("/newtickets");
   };
 
   const handleViewAllTickets = () => {
     navigate("/tickets");
   };
 
-  const handleTicketClick = (ticketId: string) => {
+  const handleViewTicket = (ticketId: string) => {
     navigate(`/tickets/${ticketId}`);
   };
 
-  return (
+  if (error) {
+    <ErrorDashboardSkeleton error={error} />;
+  }
+
+  return navigation.state === "loading" ? (
+    <DashboardSkeleton />
+  ) : (
     <div className="space-y-8">
       {/* Header */}
       <div>
@@ -244,15 +137,15 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
           <div className="space-y-2">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Open Tickets</span>
-              <span className="font-medium">{stats.open}</span>
+              <span className="font-medium">{stats?.open || 0}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">In Progress</span>
-              <span className="font-medium">{stats.in_progress}</span>
+              <span className="font-medium">{stats?.in_progress || 0}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Closed</span>
-              <span className="font-medium">{stats.closed}</span>
+              <span className="font-medium">{stats?.closed || 0}</span>
             </div>
           </div>
         </div>
@@ -270,15 +163,16 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
           </button>
         </div>
 
-        {tickets.length === 0 ? (
+        {!tickets || tickets.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-muted-foreground mb-4">No tickets yet</p>
-            <button
+            <Button
               onClick={handleCreateTicket}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+              className="inline-flex items-center gap-2"
             >
+              <Plus className="h-4 w-4" />
               Create your first ticket
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -286,7 +180,7 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
               <TicketCard
                 key={ticket.id}
                 ticket={ticket}
-                onClick={() => handleTicketClick(ticket.id)}
+                onClick={() => handleViewTicket(ticket.id)}
               />
             ))}
           </div>
@@ -294,4 +188,23 @@ export default function DashboardPage({ loaderData }: Route.ComponentProps) {
       </div>
     </div>
   );
+}
+
+export function ErrorDashboardSkeleton({ error }: { error: string }) {
+  <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+    <Card className="w-full max-w-md">
+      <CardHeader>
+        <CardTitle className="text-red-600">Error Loading Dashboard</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-gray-600 dark:text-gray-400">{error}</p>
+        <Button
+          onClick={() => window.location.reload()}
+          className="mt-4 w-full"
+        >
+          Retry
+        </Button>
+      </CardContent>
+    </Card>
+  </div>;
 }
