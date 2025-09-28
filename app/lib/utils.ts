@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { priorityConfig, statusConfig } from "./constants";
+import { priorityConfig, statusConfig, VALIDATION_RULES } from "./constants";
 import type { AppError, Ticket, TicketPriority, TicketStatus } from "./types";
 
 /**
@@ -271,3 +271,38 @@ export const getStatusColor = (status: string) => {
       return "bg-gray-100 text-gray-800 border-gray-200";
   }
 };
+
+export function validateTicketData(data: {
+  title: string;
+  description?: string;
+  priority?: string;
+  status?: string;
+}): string | undefined {
+  if (!data.title?.trim()) {
+    return "Title is required";
+  }
+
+  if (data.title.trim().length < VALIDATION_RULES.TITLE_MIN_LENGTH) {
+    return `Title must be at least ${VALIDATION_RULES.TITLE_MIN_LENGTH} characters`;
+  }
+
+  if (data.title.trim().length > VALIDATION_RULES.TITLE_MAX_LENGTH) {
+    return `Title must be less than ${VALIDATION_RULES.TITLE_MAX_LENGTH} characters`;
+  }
+
+  if (!data.description?.trim()) {
+    return "Description is required";
+  }
+
+  if (
+    data.description.trim().length < VALIDATION_RULES.DESCRIPTION_MIN_LENGTH
+  ) {
+    return `Description must be at least ${VALIDATION_RULES.DESCRIPTION_MIN_LENGTH} characters`;
+  }
+
+  if (
+    data.description.trim().length > VALIDATION_RULES.DESCRIPTION_MAX_LENGTH
+  ) {
+    return `Description must be less than ${VALIDATION_RULES.DESCRIPTION_MAX_LENGTH} characters`;
+  }
+}

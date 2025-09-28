@@ -5,6 +5,7 @@ import {
   Clock,
   RotateCcw,
 } from "lucide-react";
+import type { TicketPriority } from "./types";
 
 // Status configuration
 export const statusConfig = {
@@ -156,3 +157,13 @@ export const defaultTicketValues = {
   title: "",
   description: "",
 } as const;
+
+
+export const VALIDATION_RULES = {
+  TITLE_MIN_LENGTH: 3,
+  DESCRIPTION_MIN_LENGTH: 10,
+  TITLE_MAX_LENGTH: 200,
+  DESCRIPTION_MAX_LENGTH: 5000,
+} as const;
+
+export const DEFAULT_PRIORITY: TicketPriority = "medium";
