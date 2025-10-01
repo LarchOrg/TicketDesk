@@ -15,4 +15,6 @@ export default [
 
   // Reports route (for agents and admins)
   route("reports", "routes/reports.tsx"),
+  route("admin/settings", "routes/admin.settings.tsx"),
+  route("admin/users", "routes/admin.users.tsx"),
 ] satisfies RouteConfig;

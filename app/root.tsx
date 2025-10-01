@@ -43,19 +43,21 @@ function AppLayout() {
     );
   }
 
-  // Public/auth pages or unauthenticated users render the outlet directly
-  // if (isAuthPage || !user) {
-  //   return (
-  //     <div className="min-h-screen bg-background">
-  //       {navigation.state === "loading" && (
-  //         <div className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-sm">
-  //           <NavigationSkeleton />
-  //         </div>
-  //       )}
-  //       <Outlet />
-  //     </div>
-  //   );
-  // }
+  // Public/auth pages or unauthenticated users render the outlet directly without sidebar/navbar
+  if (isAuthPage || !user) {
+    return (
+      <div className="min-h-screen bg-background">
+        {navigation.state === "loading" && (
+          <div className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-sm">
+            <div className="h-1 bg-primary/20">
+              <div className="h-full bg-primary animate-pulse" />
+            </div>
+          </div>
+        )}
+        <Outlet />
+      </div>
+    );
+  }
 
   // Show route skeleton for major navigation changes
   if (
@@ -65,16 +67,11 @@ function AppLayout() {
     return <RouteSkeleton />;
   }
 
+  // Authenticated users get the full layout with sidebar and navbar
   return (
     <div className="min-h-screen bg-background">
-      {/* Navigation Loading Indicator
-      {navigation.state === "loading" && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-sm">
-          <NavigationSkeleton />
-        </div>
-      )} */}
-
       <div className="flex h-screen">
+        {/* Sidebar */}
         <div
           className={`${
             sidebarOpen ? "w-72" : "w-16"
@@ -85,6 +82,7 @@ function AppLayout() {
           </div>
         </div>
 
+        {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <Navbar
             showSearch={true}
@@ -103,9 +101,10 @@ function AppLayout() {
         </div>
       </div>
 
+      {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 lg:hidden"
+          className="fixed inset-0 bg-black/50 lg:hidden z-30"
           onClick={toggleSidebar}
         />
       )}

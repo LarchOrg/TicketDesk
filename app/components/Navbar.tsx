@@ -2,6 +2,7 @@ import {
   Bell,
   Filter,
   LogOut,
+  Menu,
   Moon,
   MoreHorizontal,
   Plus,
@@ -11,6 +12,7 @@ import {
   Sun,
   User,
   Users,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -43,7 +45,7 @@ export function Navbar({
   sidebarOpen = true,
   onToggleSidebar,
 }: NavbarProps) {
-  const { user, profile, signOut, loading } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const permissions = useRolePermissions();
   const [signingOut, setSigningOut] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -62,39 +64,44 @@ export function Navbar({
     }
   };
 
-  // if (loading) {
-  //   return (
-  //     <nav className="bg-card border-b border-border shadow-sm">
-  //       <div className="px-6 py-4">
-  //         <div className="flex justify-between items-center">
-  //           <div className="flex items-center space-x-3">
-  //             <div className="w-8 h-8 bg-muted rounded-lg animate-pulse"></div>
-  //             <div className="h-6 w-32 bg-muted rounded animate-pulse"></div>
-  //           </div>
-  //           <div className="h-8 w-20 bg-muted rounded animate-pulse"></div>
-  //         </div>
-  //       </div>
-  //     </nav>
-  //   );
-  // }
-
   return (
-    <nav className="bg-card border-b border-border shadow-sm sticky">
+    <nav className="bg-card border-b border-border shadow-sm sticky top-0 z-40">
       <div className="px-6 py-4">
         <div className="flex justify-between items-center">
-          {showSearch && (
-            <div className="hidden md:flex flex-1 max-w-md mx-8">
-              <div className="relative w-full">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search tickets..."
-                  className="w-full pl-10 pr-4 py-2 bg-muted border border-border rounded-lg text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  onChange={(e) => onSearch?.(e.target.value)}
-                />
+          {/* Left Section - Menu Toggle and Search */}
+          <div className="flex items-center space-x-4">
+            {/* Mobile Menu Toggle */}
+            {onToggleSidebar && (
+              <Button
+                onClick={onToggleSidebar}
+                variant="ghost"
+                size="sm"
+                className="lg:hidden p-2.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+              >
+                {sidebarOpen ? (
+                  <X className="w-5 h-5" />
+                ) : (
+                  <Menu className="w-5 h-5" />
+                )}
+              </Button>
+            )}
+
+            {/* Search Bar */}
+            {showSearch && (
+              <div className="hidden md:flex flex-1 max-w-md">
+                <div className="relative w-full">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search tickets..."
+                    className="w-full pl-10 pr-4 py-2 bg-muted border border-border rounded-lg text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    onChange={(e) => onSearch?.(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Right Section */}
           <div className="flex items-center space-x-2">
@@ -183,9 +190,9 @@ export function Navbar({
                       </p>
                       <div className="flex items-center gap-2">
                         <span
-                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${getRoleColor(profile?.role || "user")}`}
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${getRoleColor((profile?.role as any) || "user")}`}
                         >
-                          {getRoleDisplayName(profile?.role || "user")}
+                          {getRoleDisplayName((profile?.role as any) || "user")}
                         </span>
                       </div>
                     </div>
@@ -203,9 +210,9 @@ export function Navbar({
                           {user.email}
                         </p>
                         <span
-                          className={`text-xs px-2 py-1 rounded-full font-medium ${getRoleColor(profile?.role || "user")}`}
+                          className={`text-xs px-2 py-1 rounded-full font-medium ${getRoleColor((profile?.role as any) || "user")}`}
                         >
-                          {getRoleDisplayName(profile?.role || "user")}
+                          {getRoleDisplayName((profile?.role as any) || "user")}
                         </span>
                       </div>
 
@@ -220,7 +227,7 @@ export function Navbar({
                         </button>
 
                         {/* Admin-only options */}
-                        {permissions.isAdmin && (
+                        {permissions.canManageUsers && (
                           <>
                             <div className="border-t border-border my-2"></div>
                             <div className="px-4 py-1">
