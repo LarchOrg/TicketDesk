@@ -60,7 +60,7 @@ interface EditTicketData {
   title: string;
   description: string;
   priority: TicketPriority;
-  assigned_to: string;
+  assigned_to: string | undefined;
 }
 
 type CommentType = "comment" | "internal_note";
@@ -258,7 +258,7 @@ async function handleUpdateTicket(
     title: formData.get("title") as string,
     description: formData.get("description") as string,
     priority: formData.get("priority") as TicketPriority,
-    assigned_to: (formData.get("assigned_to") as string) || null,
+    assigned_to: (formData.get("assigned_to") as string) || undefined,
   };
 
   const validationError = validateTicketUpdate(updates);
@@ -786,7 +786,7 @@ function useTicketManagement(ticket: Ticket, assignableUsers: Profile[]) {
       formData.append("priority", editData.priority);
       formData.append(
         "assigned_to",
-        editData.assigned_to === "unassigned" ? "" : editData.assigned_to
+        editData.assigned_to === "unassigned" || !editData.assigned_to ? "" : editData.assigned_to
       );
 
       submit(formData, { method: "POST" });

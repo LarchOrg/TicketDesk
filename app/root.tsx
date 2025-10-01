@@ -71,30 +71,45 @@ function AppLayout() {
   return (
     <div className="min-h-screen bg-background">
       <div className="flex h-screen">
-        {/* Sidebar */}
+        {/* Desktop Sidebar */}
         <div
           className={`${
             sidebarOpen ? "w-72" : "w-16"
-          } transition-all duration-300 ease-in-out flex-shrink-0 border-r border-border`}
+          } transition-all duration-300 ease-in-out flex-shrink-0 hidden lg:block`}
         >
           <div className="h-full">
             <Sidebar collapsed={!sidebarOpen} />
           </div>
         </div>
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Navbar
-            showSearch={true}
-            darkMode={darkMode}
-            onToggleDarkMode={toggleDarkMode}
-            onCreateTicket={handleCreateTicket}
-            sidebarOpen={sidebarOpen}
-            onToggleSidebar={toggleSidebar}
-          />
+        {/* Mobile Sidebar */}
+        <div
+          className={`fixed inset-y-0 left-0 z-50 w-72 transform transition-transform duration-300 ease-in-out lg:hidden ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <div className="h-full bg-card shadow-xl">
+            <Sidebar collapsed={false} />
+          </div>
+        </div>
 
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+          {/* Navbar with consistent height */}
+          <div className="flex-shrink-0">
+            <Navbar
+              showSearch={true}
+              darkMode={darkMode}
+              onToggleDarkMode={toggleDarkMode}
+              onCreateTicket={handleCreateTicket}
+              sidebarOpen={sidebarOpen}
+              onToggleSidebar={toggleSidebar}
+            />
+          </div>
+
+          {/* Main content with proper spacing */}
           <main className="flex-1 overflow-auto bg-background">
-            <div className="p-6">
+            <div className="p-4 sm:p-6 lg:p-8 max-w-full">
               <Outlet />
             </div>
           </main>
@@ -104,7 +119,7 @@ function AppLayout() {
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 lg:hidden z-30"
+          className="fixed inset-0 bg-black/50 lg:hidden z-40"
           onClick={toggleSidebar}
         />
       )}

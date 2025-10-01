@@ -217,7 +217,7 @@ function PageHeader({
     }, 0);
   }
   return (
-    <div className="flex items-center justify-between mb-6">
+    <div className="flex items-center justify-between">
       <div>
         <h1 className="text-3xl font-bold text-foreground">All Tickets</h1>
         <p className="text-muted-foreground">
@@ -406,13 +406,6 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Navigation Loading Indicator
-      {isLoading && (
-        <div className="fixed top-0 left-0 right-0 z-50">
-          <NavigationSkeleton />
-        </div>
-      )} */}
-
       <div className="max-w-full mx-auto p-6">
         <PageHeader
           onCreateTicket={handleCreateTicket}

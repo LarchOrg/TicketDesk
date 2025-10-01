@@ -1,41 +1,50 @@
-import { useState } from "react";
-import { redirect, useLoaderData, useNavigate, useSubmit } from "react-router";
-import { 
-  Users, 
-  UserPlus, 
-  Edit, 
-  Trash2, 
-  Search, 
-  Filter,
+import {
+  Crown,
   MoreHorizontal,
+  Search,
   Shield,
+  Trash2,
   User,
-  Crown
+  UserPlus,
+  Users,
 } from "lucide-react";
+import { useState } from "react";
+import { redirect, useNavigate, useSubmit } from "react-router";
+import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Input } from "../components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "../components/ui/table";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
-import { Badge } from "../components/ui/badge";
+import { Input } from "../components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../components/ui/table";
+import { getRoleColor, getRoleDisplayName } from "../lib/role-utils";
 import { createSupabaseServerClient } from "../lib/supabase-server";
+import type { Profile } from "../lib/types";
 import { createServices } from "../services";
 import type { Route } from "./+types/admin.users";
-import type { Profile } from "../lib/types";
-import { getRoleDisplayName, getRoleColor } from "../lib/role-utils";
 
 interface AdminUsersLoaderData {
   users: Profile[];
@@ -49,10 +58,14 @@ interface AdminUsersActionData {
   message?: string;
 }
 
-export async function loader({ request }: Route.LoaderArgs): Promise<AdminUsersLoaderData> {
+export async function loader({
+  request,
+}: Route.LoaderArgs): Promise<AdminUsersLoaderData> {
   try {
     const { supabase } = createSupabaseServerClient(request);
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
     if (!session) {
       throw redirect("/login");
@@ -86,10 +99,14 @@ export async function loader({ request }: Route.LoaderArgs): Promise<AdminUsersL
   }
 }
 
-export async function action({ request }: Route.ActionArgs): Promise<AdminUsersActionData> {
+export async function action({
+  request,
+}: Route.ActionArgs): Promise<AdminUsersActionData> {
   try {
     const { supabase } = createSupabaseServerClient(request);
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
     if (!session) {
       throw redirect("/login");
@@ -115,8 +132,10 @@ export async function action({ request }: Route.ActionArgs): Promise<AdminUsersA
     switch (actionType) {
       case "updateRole": {
         const newRole = formData.get("role") as string;
-        const result = await services.users.updateUserProfile(userId, { role: newRole });
-        
+        const result = await services.users.updateUserProfile(userId, {
+          role: newRole,
+        });
+
         if (result) {
           return { success: true, message: "User role updated successfully" };
         } else {
@@ -126,7 +145,7 @@ export async function action({ request }: Route.ActionArgs): Promise<AdminUsersA
 
       case "deleteUser": {
         const result = await services.users.deleteUserProfile(userId);
-        
+
         if (result) {
           return { success: true, message: "User deleted successfully" };
         } else {
@@ -174,12 +193,12 @@ function UserRoleBadge({ role }: { role: string }) {
   );
 }
 
-function UserActionsMenu({ 
-  user, 
-  onUpdateRole, 
-  onDeleteUser 
-}: { 
-  user: Profile; 
+function UserActionsMenu({
+  user,
+  onUpdateRole,
+  onDeleteUser,
+}: {
+  user: Profile;
   onUpdateRole: (userId: string, role: string) => void;
   onDeleteUser: (userId: string) => void;
 }) {
@@ -203,7 +222,7 @@ function UserActionsMenu({
           <User className="mr-2 h-4 w-4" />
           Make User
         </DropdownMenuItem>
-        <DropdownMenuItem 
+        <DropdownMenuItem
           onClick={() => onDeleteUser(user.id)}
           className="text-destructive"
         >
@@ -215,22 +234,30 @@ function UserActionsMenu({
   );
 }
 
-export default function AdminUsers({ loaderData, actionData }: Route.ComponentProps) {
+export default function AdminUsers({
+  loaderData,
+  actionData,
+}: Route.ComponentProps) {
   const { users, total, error } = loaderData;
   const navigate = useNavigate();
   const submit = useSubmit();
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email?.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredUsers = users.filter((user) => {
+    const matchesSearch =
+      user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter === "all" || user.role === roleFilter;
     return matchesSearch && matchesRole;
   });
 
   const handleUpdateRole = (userId: string, role: string) => {
-    if (confirm(`Are you sure you want to change this user's role to ${getRoleDisplayName(role as any)}?`)) {
+    if (
+      confirm(
+        `Are you sure you want to change this user's role to ${getRoleDisplayName(role as any)}?`
+      )
+    ) {
       const formData = new FormData();
       formData.append("action", "updateRole");
       formData.append("userId", userId);
@@ -240,7 +267,11 @@ export default function AdminUsers({ loaderData, actionData }: Route.ComponentPr
   };
 
   const handleDeleteUser = (userId: string) => {
-    if (confirm("Are you sure you want to delete this user? This action cannot be undone.")) {
+    if (
+      confirm(
+        "Are you sure you want to delete this user? This action cannot be undone."
+      )
+    ) {
       const formData = new FormData();
       formData.append("action", "deleteUser");
       formData.append("userId", userId);
@@ -262,7 +293,7 @@ export default function AdminUsers({ loaderData, actionData }: Route.ComponentPr
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-2">
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
@@ -328,7 +359,9 @@ export default function AdminUsers({ loaderData, actionData }: Route.ComponentPr
             <div className="text-center py-8">
               <Users className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-muted-foreground">
-                {searchTerm || roleFilter !== "all" ? "No users match your filters" : "No users found"}
+                {searchTerm || roleFilter !== "all"
+                  ? "No users match your filters"
+                  : "No users found"}
               </p>
             </div>
           ) : (
@@ -352,10 +385,14 @@ export default function AdminUsers({ loaderData, actionData }: Route.ComponentPr
                       <UserRoleBadge role={user.role} />
                     </TableCell>
                     <TableCell>
-                      {user.created_at ? new Date(user.created_at).toLocaleDateString() : "N/A"}
+                      {user.created_at
+                        ? new Date(user.created_at).toLocaleDateString()
+                        : "N/A"}
                     </TableCell>
                     <TableCell>
-                      {user.updated_at ? new Date(user.updated_at).toLocaleDateString() : "N/A"}
+                      {user.updated_at
+                        ? new Date(user.updated_at).toLocaleDateString()
+                        : "N/A"}
                     </TableCell>
                     <TableCell className="text-right">
                       <UserActionsMenu
