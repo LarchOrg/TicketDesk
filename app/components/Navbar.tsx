@@ -4,8 +4,6 @@ import {
   LogOut,
   Moon,
   MoreHorizontal,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plus,
   Search,
   Settings,
@@ -64,46 +62,26 @@ export function Navbar({
     }
   };
 
-  if (loading) {
-    return (
-      <nav className="bg-card border-b border-border shadow-sm">
-        <div className="px-6 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-muted rounded-lg animate-pulse"></div>
-              <div className="h-6 w-32 bg-muted rounded animate-pulse"></div>
-            </div>
-            <div className="h-8 w-20 bg-muted rounded animate-pulse"></div>
-          </div>
-        </div>
-      </nav>
-    );
-  }
+  // if (loading) {
+  //   return (
+  //     <nav className="bg-card border-b border-border shadow-sm">
+  //       <div className="px-6 py-4">
+  //         <div className="flex justify-between items-center">
+  //           <div className="flex items-center space-x-3">
+  //             <div className="w-8 h-8 bg-muted rounded-lg animate-pulse"></div>
+  //             <div className="h-6 w-32 bg-muted rounded animate-pulse"></div>
+  //           </div>
+  //           <div className="h-8 w-20 bg-muted rounded animate-pulse"></div>
+  //         </div>
+  //       </div>
+  //     </nav>
+  //   );
+  // }
 
   return (
-    <nav className="bg-card border-b border-border shadow-sm sticky top-0 z-30">
+    <nav className="bg-card border-b border-border shadow-sm sticky">
       <div className="px-6 py-4">
         <div className="flex justify-between items-center">
-          {/* Left Section */}
-          <div className="flex items-center space-x-4">
-            {/* Sidebar Toggle */}
-            {onToggleSidebar && (
-              <Button
-                onClick={onToggleSidebar}
-                variant="ghost"
-                size="sm"
-                className="p-2.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {sidebarOpen ? (
-                  <PanelLeftClose className="w-4 h-4" />
-                ) : (
-                  <PanelLeftOpen className="w-4 h-4" />
-                )}
-              </Button>
-            )}
-          </div>
-
-          {/* Center Section - Search */}
           {showSearch && (
             <div className="hidden md:flex flex-1 max-w-md mx-8">
               <div className="relative w-full">

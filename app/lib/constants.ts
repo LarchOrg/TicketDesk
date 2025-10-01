@@ -130,7 +130,7 @@ export const uiConfig = {
 // Route paths
 export const routes = {
   tickets: "/",
-  newTicket: "/tickets/new",
+  newTicket: "/newtickets",
   ticketDetail: (id: string) => `/tickets/${id}`,
   login: "/login",
   signup: "/signup",
@@ -157,7 +157,6 @@ export const defaultTicketValues = {
   title: "",
   description: "",
 } as const;
-
 
 export const VALIDATION_RULES = {
   TITLE_MIN_LENGTH: 3,

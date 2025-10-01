@@ -1,6 +1,10 @@
 import { Grid, List, Plus } from "lucide-react";
 import { useState } from "react";
-import { redirect, useNavigate } from "react-router";
+import { redirect, useNavigate, useNavigation } from "react-router";
+import {
+  DashboardSkeleton,
+  TicketListSkeleton,
+} from "~/components/LoadingComponents";
 import TicketCard from "~/components/TicketCard";
 import TicketTable from "~/components/TicketTable";
 import { Button } from "~/components/ui/button";
@@ -49,9 +53,15 @@ function parseFiltersFromUrl(url: URL): TicketFilters {
     priority: url.searchParams.get("priority") || undefined,
     search: url.searchParams.get("search") || undefined,
     sortBy: url.searchParams.get("sortBy") || DEFAULT_FILTERS.sortBy,
-    sortOrder: (url.searchParams.get("sortOrder") as "asc" | "desc") || DEFAULT_FILTERS.sortOrder,
-    limit: parseInt(url.searchParams.get("limit") || String(DEFAULT_FILTERS.limit)),
-    offset: parseInt(url.searchParams.get("offset") || String(DEFAULT_FILTERS.offset)),
+    sortOrder:
+      (url.searchParams.get("sortOrder") as "asc" | "desc") ||
+      DEFAULT_FILTERS.sortOrder,
+    limit: parseInt(
+      url.searchParams.get("limit") || String(DEFAULT_FILTERS.limit)
+    ),
+    offset: parseInt(
+      url.searchParams.get("offset") || String(DEFAULT_FILTERS.offset)
+    ),
   };
 }
 
@@ -69,13 +79,15 @@ function createEmptyStats(): TicketStats {
 // Meta function
 export const meta = () => {
   return [
-    { title: "All Tickets - TicketDesk" },
-    { name: "description", content: "Manage and track all support tickets" },
+    { title: "Ticket Queue - Support Portal" },
+    { name: "description", content: "Manage and view all support tickets" },
   ];
 };
 
 // Loader function
-export async function loader({ request }: Route.LoaderArgs): Promise<TicketsLoaderData> {
+export async function loader({
+  request,
+}: Route.LoaderArgs): Promise<TicketsLoaderData> {
   const url = new URL(request.url);
   const filters = parseFiltersFromUrl(url);
 
@@ -128,12 +140,12 @@ export async function loader({ request }: Route.LoaderArgs): Promise<TicketsLoad
     };
   } catch (error) {
     console.error("Tickets loader error:", error);
-    
+
     // If it's a redirect, re-throw it
     if (error instanceof Response) {
       throw error;
     }
-    
+
     return {
       tickets: [],
       stats: createEmptyStats(),
@@ -149,12 +161,12 @@ export async function loader({ request }: Route.LoaderArgs): Promise<TicketsLoad
 }
 
 // Component: View Mode Toggle
-function ViewModeToggle({ 
-  viewMode, 
-  onViewModeChange 
-}: { 
-  viewMode: ViewMode; 
-  onViewModeChange: (mode: ViewMode) => void; 
+function ViewModeToggle({
+  viewMode,
+  onViewModeChange,
+}: {
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
 }) {
   return (
     <div className="flex items-center border rounded-lg">
@@ -185,15 +197,25 @@ function ViewModeToggle({
 }
 
 // Component: Page Header
-function PageHeader({ 
-  onCreateTicket, 
-  viewMode, 
-  onViewModeChange 
-}: { 
-  onCreateTicket: () => void; 
-  viewMode: ViewMode; 
-  onViewModeChange: (mode: ViewMode) => void; 
+function PageHeader({
+  onCreateTicket,
+  viewMode,
+  onViewModeChange,
+}: {
+  onCreateTicket: () => void;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
 }) {
+  if (typeof window !== "undefined") {
+    setTimeout(() => {
+      const el = document.querySelector(
+        "h1.text-3xl.font-bold.text-foreground"
+      );
+      if (el) {
+        el.textContent = "Ticket Queue";
+      }
+    }, 0);
+  }
   return (
     <div className="flex items-center justify-between mb-6">
       <div>
@@ -203,8 +225,14 @@ function PageHeader({
         </p>
       </div>
       <div className="flex items-center space-x-4">
-        <ViewModeToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
-        <Button onClick={onCreateTicket} className="flex items-center space-x-2">
+        <ViewModeToggle
+          viewMode={viewMode}
+          onViewModeChange={onViewModeChange}
+        />
+        <Button
+          onClick={onCreateTicket}
+          className="flex items-center space-x-2"
+        >
           <Plus className="w-4 h-4" />
           <span>New Ticket</span>
         </Button>
@@ -214,14 +242,14 @@ function PageHeader({
 }
 
 // Component: Stats Card
-function StatsCard({ 
-  value, 
-  label, 
-  color 
-}: { 
-  value: number; 
-  label: string; 
-  color: string; 
+function StatsCard({
+  value,
+  label,
+  color,
+}: {
+  value: number;
+  label: string;
+  color: string;
 }) {
   return (
     <Card>
@@ -256,20 +284,18 @@ function EmptyState({ onCreateTicket }: { onCreateTicket: () => void }) {
       <p className="text-muted-foreground mb-4">
         No tickets found matching your criteria.
       </p>
-      <Button onClick={onCreateTicket}>
-        Create your first ticket
-      </Button>
+      <Button onClick={onCreateTicket}>Create your first ticket</Button>
     </div>
   );
 }
 
 // Component: Tickets Grid
-function TicketsGrid({ 
-  tickets, 
-  onTicketClick 
-}: { 
-  tickets: Ticket[]; 
-  onTicketClick: (ticket: Ticket) => void; 
+function TicketsGrid({
+  tickets,
+  onTicketClick,
+}: {
+  tickets: Ticket[];
+  onTicketClick: (ticket: Ticket) => void;
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -342,12 +368,14 @@ function useTicketManagement() {
 
 // Main component
 export default function TicketsPage({ loaderData }: Route.ComponentProps) {
+  const navigation = useNavigation();
+
   if (!loaderData) {
-    return <div>Loading...</div>;
+    return <DashboardSkeleton />;
   }
 
   const { tickets, stats, error } = loaderData as TicketsLoaderData;
-  
+
   const {
     viewMode,
     setViewMode,
@@ -356,6 +384,9 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
     handleEditTicket,
     handleDeleteTicket,
   } = useTicketManagement();
+
+  // Show loading state during navigation
+  const isLoading = navigation.state === "loading";
 
   // Handle error state
   if (error) {
@@ -375,6 +406,13 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Navigation Loading Indicator
+      {isLoading && (
+        <div className="fixed top-0 left-0 right-0 z-50">
+          <NavigationSkeleton />
+        </div>
+      )} */}
+
       <div className="max-w-full mx-auto p-6">
         <PageHeader
           onCreateTicket={handleCreateTicket}
@@ -385,7 +423,9 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
         <StatsGrid stats={stats} />
 
         {/* Tickets Display */}
-        {tickets.length === 0 ? (
+        {isLoading ? (
+          <TicketListSkeleton />
+        ) : tickets.length === 0 ? (
           <EmptyState onCreateTicket={handleCreateTicket} />
         ) : viewMode === "grid" ? (
           <TicketsGrid tickets={tickets} onTicketClick={handleTicketClick} />

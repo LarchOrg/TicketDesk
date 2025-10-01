@@ -122,12 +122,6 @@ export function FormSkeleton() {
 export function DashboardSkeleton() {
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <div className="h-8 bg-muted rounded w-48 animate-pulse mb-2"></div>
-        <div className="h-4 bg-muted rounded w-96 animate-pulse"></div>
-      </div>
-
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -251,10 +245,7 @@ export function RouteSkeleton() {
 export function NavigationSkeleton() {
   return (
     <div className="flex items-center justify-center p-4">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span>Loading...</span>
-      </div>
+      <div className="flex items-center gap-2 text-muted-foreground"></div>
     </div>
   );
 }

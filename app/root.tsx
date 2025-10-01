@@ -8,10 +8,11 @@ import {
   ScrollRestoration,
   useLocation,
   useNavigate,
+  useNavigation,
 } from "react-router";
 import type { Route } from "./+types/root";
 import "./app.css";
-import { LoadingFallback } from "./components/LoadingComponents";
+import { LoadingFallback, RouteSkeleton } from "./components/LoadingComponents";
 import { Navbar } from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -24,11 +25,12 @@ function AppLayout() {
   const { sidebarOpen, toggleSidebar } = useSidebar();
   const location = useLocation();
   const navigate = useNavigate();
+  const navigation = useNavigation();
 
   const isAuthPage = /^\/(login|signup)(\/|$)/.test(location.pathname);
 
   const handleCreateTicket = useCallback(
-    () => navigate("/tickets/new"),
+    () => navigate("/newtickets"),
     [navigate]
   );
 
@@ -42,16 +44,36 @@ function AppLayout() {
   }
 
   // Public/auth pages or unauthenticated users render the outlet directly
-  if (isAuthPage || !user) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Outlet />
-      </div>
-    );
+  // if (isAuthPage || !user) {
+  //   return (
+  //     <div className="min-h-screen bg-background">
+  //       {navigation.state === "loading" && (
+  //         <div className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-sm">
+  //           <NavigationSkeleton />
+  //         </div>
+  //       )}
+  //       <Outlet />
+  //     </div>
+  //   );
+  // }
+
+  // Show route skeleton for major navigation changes
+  if (
+    navigation.state === "loading" &&
+    navigation.location?.pathname !== location.pathname
+  ) {
+    return <RouteSkeleton />;
   }
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Navigation Loading Indicator
+      {navigation.state === "loading" && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-sm">
+          <NavigationSkeleton />
+        </div>
+      )} */}
+
       <div className="flex h-screen">
         <div
           className={`${
@@ -83,7 +105,7 @@ function AppLayout() {
 
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 lg:hidden"
           onClick={toggleSidebar}
         />
       )}
