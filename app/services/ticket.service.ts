@@ -303,5 +303,143 @@ export function createTicketService(supabase: SupabaseClient) {
 
       return { success: true };
     },
+
+    /**
+     * Get recent activity for dashboard
+     */
+    async getRecentActivity(limit: number = 10): Promise<any[]> {
+      try {
+        // Get recent tickets
+        const { data: recentTickets } = await supabase
+          .from("tickets")
+          .select(
+            `
+            id,
+            title,
+            status,
+            priority,
+            created_at,
+            updated_at,
+            created_by_profile:profiles!created_by(id, name, email)
+          `
+          )
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        // Get recent comments
+        const { data: recentComments } = await supabase
+          .from("comments")
+          .select(
+            `
+            id,
+            ticket_id,
+            content,
+            created_at,
+            user:profiles!user_id(id, name, email),
+            ticket:tickets!ticket_id(id, title)
+          `
+          )
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        // Get recently updated tickets (status changes)
+        const { data: updatedTickets } = await supabase
+          .from("tickets")
+          .select(
+            `
+            id,
+            title,
+            status,
+            updated_at,
+            created_at,
+            created_by_profile:profiles!created_by(id, name, email)
+          `
+          )
+          .not("updated_at", "is", null)
+          .order("updated_at", { ascending: false })
+          .limit(limit);
+
+        const activities: any[] = [];
+
+        // Add ticket creation activities
+        if (recentTickets) {
+          recentTickets.forEach((ticket: any) => {
+            const creatorProfile = Array.isArray(ticket.created_by_profile)
+              ? ticket.created_by_profile[0]
+              : ticket.created_by_profile;
+
+            activities.push({
+              id: `ticket-created-${ticket.id}`,
+              type: "ticket_created",
+              description: `New ticket created: "${ticket.title}"`,
+              details: `Priority: ${ticket.priority}, Status: ${ticket.status}`,
+              user: creatorProfile?.name || "Unknown User",
+              timestamp: ticket.created_at,
+              ticketId: ticket.id,
+              icon: "ticket",
+            });
+          });
+        }
+
+        // Add comment activities
+        if (recentComments) {
+          recentComments.forEach((comment: any) => {
+            const userProfile = Array.isArray(comment.user)
+              ? comment.user[0]
+              : comment.user;
+
+            const contentPreview =
+              comment.content.length > 50
+                ? comment.content.substring(0, 50) + "..."
+                : comment.content;
+            activities.push({
+              id: `comment-${comment.id}`,
+              type: "comment_added",
+              description: `Comment added to "${comment.ticket?.title || "ticket"}"`,
+              details: contentPreview,
+              user: userProfile?.name || "Unknown User",
+              timestamp: comment.created_at,
+              ticketId: comment.ticket_id,
+              icon: "message",
+            });
+          });
+        }
+
+        // Add ticket update activities
+        if (updatedTickets) {
+          updatedTickets.forEach((ticket: any) => {
+            const creatorProfile = Array.isArray(ticket.created_by_profile)
+              ? ticket.created_by_profile[0]
+              : ticket.created_by_profile;
+
+            // Only add if updated_at is different from created_at
+            if (ticket.updated_at && ticket.updated_at !== ticket.created_at) {
+              activities.push({
+                id: `ticket-updated-${ticket.id}`,
+                type: "ticket_updated",
+                description: `Ticket updated: "${ticket.title}"`,
+                details: `Status: ${ticket.status}`,
+                user: creatorProfile?.name || "Unknown User",
+                timestamp: ticket.updated_at,
+                ticketId: ticket.id,
+                icon: "edit",
+              });
+            }
+          });
+        }
+
+        // Sort all activities by timestamp (most recent first)
+        activities.sort(
+          (a, b) =>
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+
+        // Return only the requested limit
+        return activities.slice(0, limit);
+      } catch (error) {
+        console.error("Error fetching recent activity:", error);
+        return [];
+      }
+    },
   };
 }

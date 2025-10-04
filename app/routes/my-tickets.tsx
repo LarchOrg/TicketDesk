@@ -29,13 +29,18 @@ export async function loader({
   request,
 }: Route.LoaderArgs): Promise<MyTicketsLoaderData> {
   try {
-    const { supabase } = createSupabaseServerClient(request);
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { supabase, response } = createSupabaseServerClient(request);
 
-    if (!session) {
-      throw redirect("/login");
+    // Use getUser() instead of getSession() for security
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      throw redirect("/login", {
+        headers: response.headers,
+      });
     }
 
     const url = new URL(request.url);
@@ -44,7 +49,7 @@ export async function loader({
     const search = url.searchParams.get("search");
 
     const filters: TicketFilters = {
-      created_by: session.user.id, // Only show user's own tickets
+      created_by: user.id, // Only show user's own tickets
       status: status as any,
       priority: priority as any,
       search: search || undefined,
@@ -63,6 +68,11 @@ export async function loader({
       filters,
     };
   } catch (error) {
+    // If it's a redirect response, re-throw it so Remix can handle it
+    if (error instanceof Response) {
+      throw error;
+    }
+
     console.error("Error loading my tickets:", error);
     return {
       tickets: [],
@@ -92,9 +102,11 @@ export const meta = () => {
 function FilterPanel({
   filters,
   onFilterChange,
+  disabled = false,
 }: {
   filters: TicketFilters;
   onFilterChange: (filters: Partial<TicketFilters>) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="w-full rounded-lg flex items-center gap-6 justify-between">
@@ -114,6 +126,7 @@ function FilterPanel({
                 status: value === "all" ? undefined : (value as string),
               })
             }
+            disabled={disabled}
           >
             <SelectTrigger className="w-40">
               <SelectValue placeholder="All statuses" />
@@ -141,6 +154,7 @@ function FilterPanel({
                 priority: value === "all" ? undefined : (value as string),
               })
             }
+            disabled={disabled}
           >
             <SelectTrigger className="w-40">
               <SelectValue placeholder="All priorities" />

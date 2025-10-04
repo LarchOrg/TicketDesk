@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import {
   isRouteErrorResponse,
   Links,
@@ -8,11 +8,9 @@ import {
   ScrollRestoration,
   useLocation,
   useNavigate,
-  useNavigation,
 } from "react-router";
 import type { Route } from "./+types/root";
 import "./app.css";
-import { LoadingFallback, RouteSkeleton } from "./components/LoadingComponents";
 import { Navbar } from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -25,8 +23,8 @@ function AppLayout() {
   const { sidebarOpen, toggleSidebar } = useSidebar();
   const location = useLocation();
   const navigate = useNavigate();
-  const navigation = useNavigation();
 
+  // Check if current page is an auth page (login/signup)
   const isAuthPage = /^\/(login|signup)(\/|$)/.test(location.pathname);
 
   const handleCreateTicket = useCallback(
@@ -34,40 +32,41 @@ function AppLayout() {
     [navigate]
   );
 
-  // Initial loading state (only shown before auth is resolved)
-  if (loading && !user) {
+  // Redirect to login if not authenticated and not on auth page
+  useEffect(() => {
+    if (!loading && !user && !isAuthPage) {
+      console.log("🔒 Not authenticated, redirecting to login");
+      navigate("/login", { replace: true });
+    }
+  }, [loading, user, isAuthPage, navigate]);
+
+  // Show loading state while checking authentication
+  if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <LoadingFallback message="Loading..." />
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
       </div>
     );
   }
 
-  // Public/auth pages or unauthenticated users render the outlet directly without sidebar/navbar
-  if (isAuthPage || !user) {
+  // If on auth page, just render the outlet without layout
+  if (isAuthPage) {
     return (
       <div className="min-h-screen bg-background">
-        {navigation.state === "loading" && (
-          <div className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-sm">
-            <div className="h-1 bg-primary/20">
-              <div className="h-full bg-primary animate-pulse" />
-            </div>
-          </div>
-        )}
         <Outlet />
       </div>
     );
   }
 
-  // Show route skeleton for major navigation changes
-  if (
-    navigation.state === "loading" &&
-    navigation.location?.pathname !== location.pathname
-  ) {
-    return <RouteSkeleton />;
+  // If not authenticated, render nothing (useEffect will redirect)
+  if (!user) {
+    return null;
   }
 
-  // Authenticated users get the full layout with sidebar and navbar
+  // Main authenticated layout
   return (
     <div className="min-h-screen bg-background">
       <div className="flex h-screen">
@@ -95,7 +94,7 @@ function AppLayout() {
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          {/* Navbar with consistent height */}
+          {/* Navbar */}
           <div className="flex-shrink-0">
             <Navbar
               showSearch={true}
@@ -107,9 +106,9 @@ function AppLayout() {
             />
           </div>
 
-          {/* Main content with proper spacing */}
+          {/* Main content */}
           <main className="flex-1 overflow-auto bg-background">
-            <div className="p-4 sm:p-6 lg:p-8 max-w-full">
+            <div className="max-w-full">
               <Outlet />
             </div>
           </main>
@@ -173,6 +172,8 @@ export default function RootLayout() {
 // Enhanced Error Boundary with better UX
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const navigate = useNavigate();
+  const location = useLocation();
+
   let message = "Oops!";
   let details = "An unexpected error occurred.";
   let stack: string | undefined;
@@ -190,7 +191,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     stack = error.stack;
   }
 
-  return (
+  // Check if we're on an auth page
+  const isAuthPage = /^\/(login|signup)(\/|$)/.test(location.pathname);
+
+  const errorContent = (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="max-w-md w-full space-y-6 text-center">
         <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center">
@@ -257,5 +261,19 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         </p>
       </div>
     </div>
+  );
+
+  // If on auth page, render error without layout
+  if (isAuthPage) {
+    return errorContent;
+  }
+
+  // For authenticated pages, wrap with providers so navigation works properly
+  return (
+    <ThemeProvider>
+      <SidebarProvider>
+        <AuthProvider>{errorContent}</AuthProvider>
+      </SidebarProvider>
+    </ThemeProvider>
   );
 }

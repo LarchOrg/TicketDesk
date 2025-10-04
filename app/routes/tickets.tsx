@@ -94,13 +94,14 @@ export async function loader({
   try {
     const { supabase, response } = createSupabaseServerClient(request);
 
+    // Use getUser() instead of getSession() for security
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    if (sessionError) {
-      console.error("Session error in tickets loader:", sessionError);
+    if (authError) {
+      console.error("Auth error in tickets loader:", authError);
       return {
         tickets: [],
         stats: createEmptyStats(),
@@ -114,8 +115,8 @@ export async function loader({
       };
     }
 
-    if (!session) {
-      console.log("No session found, redirecting to login");
+    if (!user) {
+      console.log("No user found, redirecting to login");
       throw redirect("/login", { headers: response.headers });
     }
 

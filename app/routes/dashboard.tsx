@@ -4,7 +4,9 @@ import {
   BarChart3,
   CheckCircle,
   Clock,
+  Edit,
   Filter,
+  MessageSquare,
   Plus,
   Search,
   Settings,
@@ -39,44 +41,45 @@ import type { Route } from "./+types/dashboard";
 interface UnifiedDashboardLoaderData {
   role: UserRole;
   tickets: TicketType[];
-  assignedTickets?: TicketType[]; // For agents
-  allTickets?: TicketType[]; // For agents/admins
+  assignedTickets?: TicketType[];
+  allTickets?: TicketType[];
   stats: TicketStats;
   myStats?: {
     assigned: number;
     resolved: number;
     avgResponseTime: string;
-  }; // For agents
-  users?: Profile[]; // For admins
-  agents?: Profile[]; // For admins
-  recentActivity?: any[]; // For admins
+  };
+  users?: Profile[];
+  agents?: Profile[];
+  recentActivity?: any[];
   error?: string;
 }
 
 export async function loader({
   request,
-}: Route.LoaderArgs): Promise<UnifiedDashboardLoaderData> {
+}: Route.LoaderArgs): Promise<UnifiedDashboardLoaderData | Response> {
   try {
-    const { supabase } = createSupabaseServerClient(request);
+    const { supabase, response } = createSupabaseServerClient(request);
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    if (!session) {
-      throw redirect("/login");
+    if (authError || !user) {
+      return redirect("/login", {
+        headers: response.headers,
+      });
     }
 
-    // Get user profile to determine role
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .single();
 
     const role = (profile?.role as UserRole) || "user";
     const services = createServices(supabase);
 
-    // Base data structure
     const baseData: UnifiedDashboardLoaderData = {
       role,
       tickets: [],
@@ -92,7 +95,6 @@ export async function loader({
 
     switch (role) {
       case "admin": {
-        // Admin gets all tickets and system-wide data
         const allTickets = await services.tickets.getTickets({
           sortBy: "created_at",
           sortOrder: "desc",
@@ -103,21 +105,24 @@ export async function loader({
         const users = await services.users.getAllUsers();
         const agents = await services.users.getAssignableUsers();
 
-        // Mock recent activity
-        const recentActivity = [
-          {
-            id: 1,
-            type: "ticket_created",
-            description: "New ticket created by John Doe",
-            timestamp: new Date().toISOString(),
-          },
-          {
-            id: 2,
-            type: "user_registered",
-            description: "New user registered: Jane Smith",
-            timestamp: new Date(Date.now() - 3600000).toISOString(),
-          },
-        ];
+        const ticketActivity = await services.tickets.getRecentActivity(10);
+        const recentUsers = await services.users.getRecentUsers(5);
+        const userActivity = (recentUsers || []).map((user) => ({
+          id: `user-registered-${user.id}`,
+          type: "user_registered",
+          description: `New user registered: ${user.name || user.email}`,
+          details: `Role: ${user.role || "user"}`,
+          user: "System",
+          timestamp: user.created_at,
+          icon: "user",
+        }));
+
+        const recentActivity = [...(ticketActivity || []), ...userActivity]
+          .sort(
+            (a, b) =>
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          )
+          .slice(0, 15);
 
         return {
           ...baseData,
@@ -131,9 +136,8 @@ export async function loader({
       }
 
       case "agent": {
-        // Agent gets assigned tickets + all tickets for queue
         const assignedTickets = await services.tickets.getTickets({
-          assigned_to: session.user.id,
+          assigned_to: user.id,
           sortBy: "created_at",
           sortOrder: "desc",
           limit: 20,
@@ -147,7 +151,6 @@ export async function loader({
 
         const stats = await services.tickets.getTicketStats();
 
-        // Calculate agent-specific stats
         const myAssignedCount = assignedTickets.tickets.length;
         const myResolvedCount = assignedTickets.tickets.filter(
           (t) => t.status === "resolved" || t.status === "closed"
@@ -171,16 +174,15 @@ export async function loader({
 
       case "user":
       default: {
-        // User gets only their own tickets
         const userTickets = await services.tickets.getTickets({
-          created_by: session.user.id,
+          created_by: user.id,
           sortBy: "created_at",
           sortOrder: "desc",
           limit: 10,
         });
 
         const allUserTickets = await services.tickets.getTickets({
-          created_by: session.user.id,
+          created_by: user.id,
         });
 
         const stats = {
@@ -208,6 +210,10 @@ export async function loader({
       }
     }
   } catch (error) {
+    if (error instanceof Response) {
+      throw error;
+    }
+
     console.error("Error loading unified dashboard:", error);
     return {
       role: "user",
@@ -241,7 +247,6 @@ export const meta = ({ data }: { data: UnifiedDashboardLoaderData }) => {
   ];
 };
 
-// Shared Components
 function StatsCard({
   title,
   value,
@@ -258,7 +263,7 @@ function StatsCard({
   subtitle?: string;
 }) {
   return (
-    <Card>
+    <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
         <Icon className={`h-4 w-4 ${color}`} />
@@ -301,7 +306,7 @@ function TicketQueue({
   );
 
   return (
-    <Card>
+    <div className="mb-6">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>{title}</CardTitle>
@@ -335,7 +340,7 @@ function TicketQueue({
             {filteredTickets.slice(0, 5).map((ticket) => (
               <div
                 key={ticket.id}
-                className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
                 onClick={() => navigate(`/tickets/${ticket.id}`)}
               >
                 <div className="flex-1">
@@ -344,7 +349,7 @@ function TicketQueue({
                     <StatusBadge status={ticket.status} />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    #{ticket.id} •{" "}
+                    #{ticket.id.slice(-8)} •{" "}
                     {new Date(ticket.created_at).toLocaleDateString()}
                   </p>
                 </div>
@@ -362,16 +367,15 @@ function TicketQueue({
           </div>
         )}
       </CardContent>
-    </Card>
+    </div>
   );
 }
 
-// Role-specific Components
 function AdminQuickActions() {
   const navigate = useNavigate();
 
   return (
-    <Card>
+    <Card className="shadow-md hover:shadow-lg transition-shadow">
       <CardHeader>
         <CardTitle>Quick Actions</CardTitle>
       </CardHeader>
@@ -408,7 +412,7 @@ function UserQuickActions() {
   const navigate = useNavigate();
 
   return (
-    <Card>
+    <Card className="shadow-md hover:shadow-lg transition-shadow">
       <CardHeader>
         <CardTitle>Quick Actions</CardTitle>
       </CardHeader>
@@ -434,25 +438,182 @@ function UserQuickActions() {
 }
 
 function RecentActivity({ activities }: { activities: any[] }) {
+  const navigate = useNavigate();
+
+  const getActivityIcon = (iconType: string) => {
+    const iconClasses = "h-5 w-5";
+    switch (iconType) {
+      case "ticket":
+        return (
+          <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30">
+            <Ticket
+              className={`${iconClasses} text-blue-600 dark:text-blue-400`}
+            />
+          </div>
+        );
+      case "message":
+        return (
+          <div className="p-2 rounded-full bg-green-100 dark:bg-green-900/30">
+            <MessageSquare
+              className={`${iconClasses} text-green-600 dark:text-green-400`}
+            />
+          </div>
+        );
+      case "edit":
+        return (
+          <div className="p-2 rounded-full bg-orange-100 dark:bg-orange-900/30">
+            <Edit
+              className={`${iconClasses} text-orange-600 dark:text-orange-400`}
+            />
+          </div>
+        );
+      case "user":
+        return (
+          <div className="p-2 rounded-full bg-purple-100 dark:bg-purple-900/30">
+            <UserPlus
+              className={`${iconClasses} text-purple-600 dark:text-purple-400`}
+            />
+          </div>
+        );
+      default:
+        return (
+          <div className="p-2 rounded-full bg-gray-100 dark:bg-gray-900/30">
+            <Clock
+              className={`${iconClasses} text-gray-600 dark:text-gray-400`}
+            />
+          </div>
+        );
+    }
+  };
+
+  const getActivityBadge = (type: string) => {
+    switch (type) {
+      case "ticket_created":
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+            New Ticket
+          </span>
+        );
+      case "comment_added":
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+            Comment
+          </span>
+        );
+      case "ticket_updated":
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
+            Updated
+          </span>
+        );
+      case "user_registered":
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+            New User
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const formatTimeAgo = (timestamp: string) => {
+    const now = new Date();
+    const activityTime = new Date(timestamp);
+    const diffInSeconds = Math.floor(
+      (now.getTime() - activityTime.getTime()) / 1000
+    );
+
+    if (diffInSeconds < 60) return "Just now";
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400)
+      return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 604800)
+      return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    return activityTime.toLocaleDateString();
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Recent Activity</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {activities.map((activity) => (
-            <div key={activity.id} className="flex items-start space-x-3">
-              <div className="w-2 h-2 bg-primary rounded-full mt-2" />
-              <div className="flex-1">
-                <p className="text-sm">{activity.description}</p>
-                <p className="text-xs text-muted-foreground">
-                  {new Date(activity.timestamp).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          ))}
+    <Card className="overflow-hidden shadow-md hover:shadow-lg transition-shadow">
+      <CardHeader className="border-b">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary" />
+            Recent Activity
+          </CardTitle>
+          <span className="text-xs text-muted-foreground">Last 24 hours</span>
         </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {activities && activities.length > 0 ? (
+          <div className="divide-y">
+            {activities.map((activity, index) => (
+              <div
+                key={activity.id}
+                className={`p-4 transition-all duration-200 ${
+                  activity.ticketId ? "cursor-pointer hover:bg-accent/50" : ""
+                } ${index === 0 ? "bg-accent/20" : ""}`}
+                onClick={() => {
+                  if (activity.ticketId) {
+                    navigate(`/tickets/${activity.ticketId}`);
+                  }
+                }}
+              >
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0">
+                    {getActivityIcon(activity.icon)}
+                  </div>
+
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-foreground leading-tight">
+                          {activity.description}
+                        </p>
+                      </div>
+                      {getActivityBadge(activity.type)}
+                    </div>
+
+                    {activity.details && (
+                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                        {activity.details}
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        <span className="font-medium">{activity.user}</span>
+                      </div>
+                      <span>•</span>
+                      <span>{formatTimeAgo(activity.timestamp)}</span>
+                      {activity.ticketId && (
+                        <>
+                          <span>•</span>
+                          <span className="text-primary hover:underline">
+                            View ticket →
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 px-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+              <Clock className="h-8 w-8 text-muted-foreground opacity-50" />
+            </div>
+            <p className="text-sm font-medium text-foreground mb-1">
+              No recent activity
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Activity will appear here as it happens
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -499,7 +660,6 @@ export default function UnifiedDashboard({ loaderData }: Route.ComponentProps) {
     );
   }
 
-  // Show loading state during navigation
   if (isLoading) {
     return <DashboardSkeleton />;
   }
@@ -552,7 +712,7 @@ export default function UnifiedDashboard({ loaderData }: Route.ComponentProps) {
     const statsToShow = role === "admin" ? baseStats : baseStats.slice(0, 4);
 
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         {statsToShow.map((stat) => (
           <StatsCard
             key={stat.key}
@@ -579,114 +739,216 @@ export default function UnifiedDashboard({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <div className="container mx-auto px-4 py-2 space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+      <div className="container mx-auto px-4 py-6 space-y-6">
+        {/* Header Section */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold tracking-tight">
+              {getDashboardTitle()}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {role === "admin" && "System overview and management"}
+              {role === "agent" && "Manage and track your assigned tickets"}
+              {role === "user" && "Track your support requests"}
+            </p>
+          </div>
+          {role !== "admin" && (
+            <Button
+              onClick={() => navigate("/newtickets")}
+              size="lg"
+              className="shadow-lg hover:shadow-xl transition-shadow"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              New Ticket
+            </Button>
+          )}
+        </div>
+
+        {/* Stats Cards */}
+        {getStatsCards()}
+
+        {/* Main Content Grid */}
+        <div className="grid gap-6 lg:grid-cols-12">
+          {/* Left Column - Main Content */}
+          <div className="lg:col-span-8 space-y-6">
+            {/* Agent Tabs */}
+            {role === "agent" && assignedTickets && allTickets && (
+              <Card className="shadow-md hover:shadow-lg transition-shadow">
+                <Tabs defaultValue="assigned" className="w-full">
+                  <CardHeader className="pb-3">
+                    <TabsList className="grid w-full grid-cols-2 h-11">
+                      <TabsTrigger
+                        value="assigned"
+                        className="text-sm font-medium"
+                      >
+                        <Ticket className="mr-2 h-4 w-4" />
+                        My Tickets ({assignedTickets.length})
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="queue"
+                        className="text-sm font-medium"
+                      >
+                        <Filter className="mr-2 h-4 w-4" />
+                        Queue ({allTickets.length})
+                      </TabsTrigger>
+                    </TabsList>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <TabsContent value="assigned" className="mt-0">
+                      <TicketQueue
+                        tickets={assignedTickets}
+                        title="My Assigned Tickets"
+                      />
+                    </TabsContent>
+                    <TabsContent value="queue" className="mt-0">
+                      <TicketQueue
+                        tickets={allTickets}
+                        title="All Tickets"
+                        showSearch
+                      />
+                    </TabsContent>
+                  </CardContent>
+                </Tabs>
+              </Card>
+            )}
+
+            {/* Admin/User Ticket List */}
+            {role !== "agent" && (
+              <Card className="shadow-md hover:shadow-lg transition-shadow">
+                <TicketQueue
+                  tickets={tickets}
+                  title={
+                    role === "admin" ? "Recent Tickets" : "My Recent Tickets"
+                  }
+                  showSearch={role === "admin"}
+                />
+              </Card>
+            )}
+
+            {/* Recent Activity for Admin - Mobile */}
+            {role === "admin" && recentActivity && (
+              <div className="lg:hidden">
+                <RecentActivity activities={recentActivity} />
+              </div>
+            )}
+          </div>
+
+          {/* Right Column - Sidebar */}
+          <div className="lg:col-span-4 space-y-4">
+            {/* Quick Actions */}
+            {role === "admin" && <AdminQuickActions />}
+            {role === "user" && <UserQuickActions />}
+
+            {/* System Overview for Admins */}
+            {role === "admin" && users && agents && (
+              <Card className="shadow-md hover:shadow-lg transition-shadow border-primary/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <BarChart3 className="h-5 w-5 text-primary" />
+                    System Overview
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                          <UserPlus className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <span className="text-sm font-medium">Total Users</span>
+                      </div>
+                      <span className="text-lg font-bold">{users.length}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-full bg-green-100 dark:bg-green-900/30">
+                          <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                        </div>
+                        <span className="text-sm font-medium">
+                          Active Agents
+                        </span>
+                      </div>
+                      <span className="text-lg font-bold">{agents.length}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 rounded-full bg-purple-100 dark:bg-purple-900/30">
+                          <Ticket className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                        </div>
+                        <span className="text-sm font-medium">
+                          Total Tickets
+                        </span>
+                      </div>
+                      <span className="text-lg font-bold">{stats.total}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        System Status
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-sm font-semibold text-green-600 dark:text-green-400">
+                          Operational
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Agent Performance Card */}
+            {role === "agent" && myStats && (
+              <Card className="shadow-md hover:shadow-lg transition-shadow border-primary/20">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    My Performance
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                    <span className="text-sm font-medium">Resolved</span>
+                    <span className="text-lg font-bold text-green-600">
+                      {myStats.resolved}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                    <span className="text-sm font-medium">Assigned</span>
+                    <span className="text-lg font-bold text-blue-600">
+                      {myStats.assigned}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                    <span className="text-sm font-medium">Avg Response</span>
+                    <span className="text-lg font-bold text-purple-600">
+                      {myStats.avgResponseTime}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
         <div>
-          <h1 className="text-3xl font-bold">{getDashboardTitle()}</h1>
-          <p className="text-muted-foreground">
-            {role === "admin" && "System overview and management"}
-            {role === "agent" && "Manage and track your assigned tickets"}
-            {role === "user" && "Track your support requests"}
-          </p>
-        </div>
-        {role !== "admin" && (
-          <Button onClick={() => navigate("/newtickets")}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Ticket
-          </Button>
-        )}
-      </div>
-
-      {/* Stats */}
-      {getStatsCards()}
-
-      {/* Main Content */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-          {/* Agent Tabs */}
-          {role === "agent" && assignedTickets && allTickets && (
-            <Tabs defaultValue="assigned" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="assigned">
-                  My Tickets ({assignedTickets.length})
-                </TabsTrigger>
-                <TabsTrigger value="queue">
-                  Ticket Queue ({allTickets.length})
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="assigned">
-                <TicketQueue
-                  tickets={assignedTickets}
-                  title="My Assigned Tickets"
-                />
-              </TabsContent>
-              <TabsContent value="queue">
-                <TicketQueue
-                  tickets={allTickets}
-                  title="All Tickets"
-                  showSearch
-                />
-              </TabsContent>
-            </Tabs>
-          )}
-
-          {/* Admin/User Ticket List */}
-          {role !== "agent" && (
-            <TicketQueue
-              tickets={tickets}
-              title={role === "admin" ? "Recent Tickets" : "My Recent Tickets"}
-              showSearch={role === "admin"}
-            />
-          )}
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Quick Actions */}
-          {role === "admin" && <AdminQuickActions />}
-          {role === "user" && <UserQuickActions />}
-
-          {/* Recent Activity for Admins */}
+          {/* Recent Activity for Admin - Desktop */}
           {role === "admin" && recentActivity && (
-            <RecentActivity activities={recentActivity} />
-          )}
-
-          {/* System Info for Admins */}
-          {role === "admin" && users && agents && (
-            <Card>
-              <CardHeader>
-                <CardTitle>System Overview</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Total Users
-                  </span>
-                  <span className="font-medium">{users.length}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Active Agents
-                  </span>
-                  <span className="font-medium">{agents.length}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    System Status
-                  </span>
-                  <span className="text-green-600 font-medium">
-                    Operational
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="hidden lg:block">
+              <RecentActivity activities={recentActivity} />
+            </div>
           )}
         </div>
       </div>
     </div>
   );
 }
+
 export function ErrorDashboardSkeleton({ error }: { error: string }) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">

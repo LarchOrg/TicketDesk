@@ -82,20 +82,25 @@ export async function loader({
   request,
 }: Route.LoaderArgs): Promise<AdminSettingsLoaderData> {
   try {
-    const { supabase } = createSupabaseServerClient(request);
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { supabase, response } = createSupabaseServerClient(request);
 
-    if (!session) {
-      throw redirect("/login");
+    // Use getUser() instead of getSession() for security
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      throw redirect("/login", {
+        headers: response.headers,
+      });
     }
 
     // Check if user is admin
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .single();
 
     if (profile?.role !== "admin") {
@@ -108,6 +113,11 @@ export async function loader({
       settings: DEFAULT_SETTINGS,
     };
   } catch (error) {
+    // If it's a redirect response, re-throw it so the framework can handle it
+    if (error instanceof Response) {
+      throw error;
+    }
+
     console.error("Error loading settings:", error);
     return {
       settings: DEFAULT_SETTINGS,
@@ -120,20 +130,25 @@ export async function action({
   request,
 }: Route.ActionArgs): Promise<AdminSettingsActionData> {
   try {
-    const supabase = createSupabaseServerClient(request);
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { supabase, response } = createSupabaseServerClient(request);
 
-    if (!session) {
-      throw redirect("/login");
+    // Use getUser() instead of getSession() for security
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      throw redirect("/login", {
+        headers: response.headers,
+      });
     }
 
     // Check if user is admin
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .single();
 
     if (profile?.role !== "admin") {
@@ -151,6 +166,11 @@ export async function action({
       message: "Settings saved successfully",
     };
   } catch (error) {
+    // If it's a redirect response, re-throw it so the framework can handle it
+    if (error instanceof Response) {
+      throw error;
+    }
+
     console.error("Error saving settings:", error);
     return { error: "Failed to save settings" };
   }

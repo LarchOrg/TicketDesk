@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { redirect } from "react-router";
 
 export function createSupabaseServerClient(request: Request) {
   const response = new Response();
@@ -74,7 +75,7 @@ export function createSupabaseServerClient(request: Request) {
 }
 
 export async function getSupabaseUser(request: Request) {
-  const { supabase } = createSupabaseServerClient(request);
+  const { supabase, response } = createSupabaseServerClient(request);
 
   try {
     const {
@@ -84,17 +85,21 @@ export async function getSupabaseUser(request: Request) {
 
     if (error) {
       console.error("❌ Server user error:", error);
-      return null;
+      return { user: null, response };
     }
 
-    return user;
+    return { user, response };
   } catch (error) {
     console.error("❌ Server user exception:", error);
-    return null;
+    return { user: null, response };
   }
 }
 
+// DEPRECATED: Use getSupabaseUser() instead
+// getSession() reads from storage and may not be authentic
+// This function is kept for backward compatibility but should not be used
 export async function getSupabaseSession(request: Request) {
+  console.warn("⚠️ getSupabaseSession() is deprecated. Use getSupabaseUser() instead for secure authentication.");
   const { supabase } = createSupabaseServerClient(request);
 
   try {
@@ -116,16 +121,53 @@ export async function getSupabaseSession(request: Request) {
 }
 
 export async function requireAuth(request: Request) {
-  const user = await getSupabaseUser(request);
+  const { supabase, response } = createSupabaseServerClient(request);
 
-  if (!user) {
-    throw new Response("Unauthorized", {
-      status: 401,
-      headers: {
-        Location: "/login",
-      },
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error || !user) {
+      throw redirect("/login", {
+        headers: response.headers,
+      });
+    }
+
+    return { user, response };
+  } catch (error) {
+    // If it's already a redirect, re-throw it
+    if (error instanceof Response) {
+      throw error;
+    }
+
+    // Otherwise, redirect to login
+    throw redirect("/login", {
+      headers: response.headers,
     });
   }
+}
 
-  return user;
+export async function requireAuthWithProfile(request: Request) {
+  const { user, response } = await requireAuth(request);
+  const { supabase } = createSupabaseServerClient(request);
+
+  try {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    if (error) {
+      console.error("❌ Profile fetch error:", error);
+      return { user, profile: null, response };
+    }
+
+    return { user, profile, response };
+  } catch (error) {
+    console.error("❌ Profile fetch exception:", error);
+    return { user, profile: null, response };
+  }
 }

@@ -6,7 +6,6 @@ import {
   Moon,
   MoreHorizontal,
   Plus,
-  Search,
   Settings,
   Shield,
   Sun,
@@ -85,21 +84,6 @@ export function Navbar({
                   <Menu className="w-5 h-5" />
                 )}
               </Button>
-            )}
-
-            {/* Search Bar */}
-            {showSearch && (
-              <div className="hidden md:flex flex-1 max-w-md">
-                <div className="relative w-full">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="Search tickets..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-muted/50 border border-border rounded-lg text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all duration-200"
-                    onChange={(e) => onSearch?.(e.target.value)}
-                  />
-                </div>
-              </div>
             )}
           </div>
 

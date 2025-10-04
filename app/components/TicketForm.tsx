@@ -1,4 +1,4 @@
-import { AlertCircle, Upload, X } from "lucide-react";
+import { AlertCircle, FileText, Upload, X } from "lucide-react";
 import React, { useState } from "react";
 import type { FormState, Profile, TicketFormData } from "~/lib/types";
 import { RichTextEditor } from "./RichTextEditor";
@@ -42,7 +42,7 @@ export default function TicketForm({
     attachments: [],
   });
 
-  const [_files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
   const [formState, setFormState] = useState<FormState>({
     isSubmitting: false,
     error: undefined,
@@ -51,6 +51,19 @@ export default function TicketForm({
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFiles = Array.from(event.target.files || []);
+
+    // Validate file sizes (10MB max per file)
+    const invalidFiles = uploadedFiles.filter(
+      (file) => file.size > 10 * 1024 * 1024
+    );
+    if (invalidFiles.length > 0) {
+      setFormState((prev) => ({
+        ...prev,
+        error: `Some files exceed 10MB limit: ${invalidFiles.map((f) => f.name).join(", ")}`,
+      }));
+      return;
+    }
+
     setFiles((prev) => [...prev, ...uploadedFiles]);
     setFormData((prev) => ({
       ...prev,
@@ -66,13 +79,68 @@ export default function TicketForm({
     }));
   };
 
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.title.trim() || !formData.description.trim()) {
+    // Clear previous errors
+    setFormState((prev) => ({ ...prev, error: undefined }));
+
+    // Validate required fields
+    if (!formData.title.trim()) {
       setFormState((prev) => ({
         ...prev,
-        error: "Title and description are required",
+        error: "Title is required",
+      }));
+      return;
+    }
+
+    if (formData.title.trim().length < 3) {
+      setFormState((prev) => ({
+        ...prev,
+        error: "Title must be at least 3 characters long",
+      }));
+      return;
+    }
+
+    if (formData.title.trim().length > 200) {
+      setFormState((prev) => ({
+        ...prev,
+        error: "Title must be less than 200 characters",
+      }));
+      return;
+    }
+
+    if (!formData.description.trim()) {
+      setFormState((prev) => ({
+        ...prev,
+        error: "Description is required",
+      }));
+      return;
+    }
+    if (formData.description.trim().length > 5000) {
+      setFormState((prev) => ({
+        ...prev,
+        error: "Description must be less than 5000 characters",
+      }));
+      return;
+    }
+
+    if (
+      !formData.assigned_to ||
+      formData.assigned_to === "unassigned" ||
+      formData.assigned_to.trim() === ""
+    ) {
+      setFormState((prev) => ({
+        ...prev,
+        error: "Please assign this ticket to an agent or admin",
       }));
       return;
     }
@@ -81,8 +149,6 @@ export default function TicketForm({
 
     try {
       await onSubmit(formData);
-      // Don't set success state here - let the parent component handle navigation
-      // The success state was causing confusion when server errors occurred
     } catch (error) {
       setFormState((prev) => ({
         ...prev,
@@ -96,74 +162,106 @@ export default function TicketForm({
   };
 
   return (
-    <Card className={`w-full max-w-4xl mx-auto ${className}`}>
-      <CardHeader>
-        <CardTitle className="flex items-center space-x-2">
+    <Card className={`w-full max-w-5xl mx-auto shadow-lg ${className}`}>
+      <CardHeader className="border-b">
+        <CardTitle className="flex items-center space-x-2 text-2xl">
+          <FileText className="w-6 h-6 text-primary" />
           <span>{isEditing ? "Edit Ticket" : "Create New Ticket"}</span>
         </CardTitle>
+        <p className="text-sm text-muted-foreground mt-2">
+          {isEditing
+            ? "Update the ticket details below"
+            : "Fill in the details below to submit a new support ticket"}
+        </p>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="pt-3">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Error Display */}
           {formState.error && (
-            <div className="flex items-center space-x-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-              <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
-              <span className="text-sm text-red-600 dark:text-red-400">
-                {formState.error}
-              </span>
-            </div>
-          )}
-
-          {/* Success Display */}
-          {formState.success && (
-            <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-              <span className="text-sm text-green-600 dark:text-green-400">
-                Ticket {isEditing ? "updated" : "created"} successfully!
-              </span>
+            <div className="flex items-start space-x-2 p-4 bg-destructive/10 border border-destructive/30 rounded-lg animate-in fade-in slide-in-from-top-2">
+              <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-destructive/90">{formState.error}</p>
+              </div>
             </div>
           )}
 
           {/* Title */}
           <div className="space-y-2">
-            <Label htmlFor="title">Title *</Label>
+            <Label htmlFor="title" className="text-base font-semibold">
+              Title <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="title"
               value={formData.title}
               onChange={(e) =>
                 setFormData((prev) => ({ ...prev, title: e.target.value }))
               }
-              placeholder="Brief description of the issue"
-              className="w-full"
+              placeholder="Brief description of the issue (e.g., 'Unable to login to dashboard')"
+              className="w-full text-base"
               required
+              minLength={3}
+              maxLength={200}
             />
+            <p className="text-xs text-muted-foreground">
+              Minimum 3 characters, maximum 200 characters
+            </p>
           </div>
 
           {/* Priority and Assignee Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Priority */}
             <div className="space-y-2">
-              <Label htmlFor="priority">Priority</Label>
+              <Label htmlFor="priority" className="text-base font-semibold">
+                Priority
+              </Label>
               <Select
                 value={formData.priority}
                 onValueChange={(value: any) =>
                   setFormData((prev) => ({ ...prev, priority: value }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="critical">Critical</SelectItem>
+                  <SelectItem value="low">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      <span>Low</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="medium">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                      <span>Medium</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="high">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-orange-500" />
+                      <span>High</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="critical">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-red-500" />
+                      <span>Critical</span>
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Select the urgency level of this ticket
+              </p>
             </div>
 
             {/* Assigned To */}
             <div className="space-y-2">
-              <Label htmlFor="assigned_to">Assign To</Label>
+              <Label htmlFor="assigned_to" className="text-base font-semibold">
+                Assignee <span className="text-destructive">*</span>
+              </Label>
               <Select
                 value={formData.assigned_to || "unassigned"}
                 onValueChange={(value: any) =>
@@ -173,30 +271,32 @@ export default function TicketForm({
                   }))
                 }
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select assignee (optional)" />
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select assignee (required)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unassigned">
+                  <SelectItem value="unassigned" disabled>
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center">
-                        <span className="text-xs text-gray-600">?</span>
+                      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center">
+                        <span className="text-xs text-muted-foreground">?</span>
                       </div>
-                      <span>Unassigned</span>
+                      <span className="text-muted-foreground">
+                        Select an assignee...
+                      </span>
                     </div>
                   </SelectItem>
                   {assignableUsers.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
-                          <span className="text-xs text-white font-medium">
+                        <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+                          <span className="text-xs text-primary-foreground font-medium">
                             {user.name?.charAt(0).toUpperCase()}
                           </span>
                         </div>
-                        <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
                           <span className="font-medium">{user.name}</span>
                           <span className="text-xs text-muted-foreground">
-                            {user.role} • {user.email}
+                            {user.role}
                           </span>
                         </div>
                       </div>
@@ -204,6 +304,9 @@ export default function TicketForm({
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Add assignee to this ticket
+              </p>
               {assignableUsers.length === 0 && (
                 <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
                   <p className="text-sm text-yellow-800 dark:text-yellow-200">
@@ -217,55 +320,76 @@ export default function TicketForm({
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">Description *</Label>
+            <Label htmlFor="description" className="text-base font-semibold">
+              Description <span className="text-destructive">*</span>
+            </Label>
             <RichTextEditor
               value={formData.description}
               onChange={(value: any) =>
                 setFormData((prev) => ({ ...prev, description: value }))
               }
-              placeholder="Provide detailed information about the issue..."
-              className="min-h-[200px]"
+              placeholder="Provide detailed information about the issue. Include steps to reproduce, expected behavior, and any error messages..."
             />
+            <p className="text-xs text-muted-foreground">
+              Minimum 10 characters, maximum 5000 characters
+            </p>
           </div>
 
           {/* File Attachments */}
-          <div className="space-y-2">
-            <Label>Attachments</Label>
-            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
+          <div className="space-y-3">
+            <Label className="text-base font-semibold">
+              Attachments{" "}
+              <span className="text-muted-foreground text-sm font-normal">
+                (Optional)
+              </span>
+            </Label>
+            <div className="border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 rounded-lg p-8 text-center transition-colors bg-muted/20">
               <input
                 type="file"
                 multiple
                 onChange={handleFileUpload}
                 className="hidden"
                 id="file-upload"
-                accept="image/*,.pdf,.doc,.docx,.txt"
+                accept="image/*,.pdf,.doc,.docx,.txt,.zip"
               />
-              <label htmlFor="file-upload" className="cursor-pointer">
-                <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+              <label htmlFor="file-upload" className="cursor-pointer block">
+                <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+                <p className="text-sm font-medium text-foreground mb-1">
                   Click to upload files or drag and drop
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                  PNG, JPG, PDF, DOC up to 10MB each
+                <p className="text-xs text-muted-foreground">
+                  PNG, JPG, PDF, DOC, TXT, ZIP up to 10MB each
                 </p>
               </label>
             </div>
 
             {/* File List */}
-            {_files.length > 0 && (
+            {files.length > 0 && (
               <div className="space-y-2">
-                {_files.map((file, index) => (
+                <p className="text-sm font-medium text-foreground">
+                  Attached Files ({files.length})
+                </p>
+                {files.map((file, index) => (
                   <div
                     key={index}
-                    className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                    className="flex items-center justify-between p-3 bg-muted/50 border border-border rounded-lg hover:bg-muted transition-colors"
                   >
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      {file.name}
-                    </span>
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <FileText className="w-5 h-5 text-primary flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {file.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatFileSize(file.size)}
+                        </p>
+                      </div>
+                    </div>
                     <button
                       type="button"
                       onClick={() => removeFile(index)}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-destructive hover:text-destructive/80 p-1 rounded hover:bg-destructive/10 transition-colors"
+                      title="Remove file"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -276,19 +400,24 @@ export default function TicketForm({
           </div>
 
           {/* Submit Button */}
-          <div className="flex justify-end space-x-4 pt-4">
-            <Button type="button" variant="outline">
+          <div className="flex justify-end space-x-3 pt-6 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => window.history.back()}
+              disabled={formState.isSubmitting || isSubmitting}
+            >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={formState.isSubmitting || isSubmitting}
-              className="min-w-[120px]"
+              className="min-w-[140px]"
             >
               {formState.isSubmitting || isSubmitting ? (
                 <div className="flex items-center space-x-2">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Saving...</span>
+                  <span>Submitting...</span>
                 </div>
               ) : isEditing ? (
                 "Update Ticket"

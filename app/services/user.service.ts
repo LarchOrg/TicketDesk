@@ -68,6 +68,23 @@ export function createUserService(supabase: SupabaseClient) {
         role?: string;
       }
     ): Promise<{ success: boolean; profile?: Profile; error?: string }> {
+      // First check if the profile exists
+      const { data: existingProfile, error: checkError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", userId)
+        .single();
+
+      if (checkError || !existingProfile) {
+        console.error("Profile not found:", userId, checkError);
+        return {
+          success: false,
+          error:
+            "User profile not found. The user may not exist in the database.",
+        };
+      }
+
+      // Now update the profile
       const { data, error } = await supabase
         .from("profiles")
         .update(updates)
@@ -131,6 +148,24 @@ export function createUserService(supabase: SupabaseClient) {
       }
 
       return { success: true };
+    },
+
+    /**
+     * Get recently registered users
+     */
+    async getRecentUsers(limit: number = 10): Promise<Profile[]> {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error("Error fetching recent users:", error);
+        return [];
+      }
+
+      return data || [];
     },
   };
 }

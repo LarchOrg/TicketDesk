@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { redirect, useNavigate, useNavigation, useSubmit } from "react-router";
+import { useState } from "react";
+import { redirect, useNavigate, useNavigation } from "react-router";
 import { FormSkeleton } from "~/components/LoadingComponents";
 import TicketForm from "~/components/TicketForm";
 import { DEFAULT_PRIORITY } from "~/lib/constants";
@@ -14,13 +14,6 @@ interface NewTicketLoaderData {
   assignableUsers: Profile[];
   currentUser: any;
   error?: string;
-}
-
-interface NewTicketActionData {
-  success: boolean;
-  error?: string;
-  message?: string;
-  ticketId?: string;
 }
 
 interface CreateTicketData {
@@ -65,11 +58,11 @@ export async function loader({
 
   try {
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    if (sessionError || !session) {
+    if (authError || !user) {
       throw redirect("/login", { headers: response.headers });
     }
 
@@ -78,12 +71,11 @@ export async function loader({
 
     return {
       assignableUsers,
-      currentUser: session.user,
+      currentUser: user,
     };
   } catch (error) {
     console.error("New ticket loader error:", error);
 
-    // If it's a redirect, re-throw it
     if (error instanceof Response) {
       throw error;
     }
@@ -97,188 +89,109 @@ export async function loader({
   }
 }
 
-// Action function
-export async function action({
-  request,
-}: Route.ActionArgs): Promise<NewTicketActionData> {
+// Action function - Now returns a redirect on success
+export async function action({ request }: Route.ActionArgs) {
   const { supabase, response } = createSupabaseServerClient(request);
 
   try {
     const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    if (sessionError || !session) {
-      // Use the response from createSupabaseServerClient to attach auth headers
-      // when redirecting so the response variable is not unused.
+    if (authError || !user) {
       throw redirect("/login", { headers: response.headers });
-    }
-
-    if (sessionError || !session) {
-      console.error("Authentication error:", sessionError);
-      return {
-        success: false,
-        error: "Authentication required. Please log in again.",
-      };
     }
 
     const formData = await request.formData();
     const ticketData = parseFormData(formData);
-    ticketData.created_by = session.user.id;
+    console.log(ticketData);
+    ticketData.created_by = user.id;
 
     // Validate the ticket data
     const validationError = validateTicketData(ticketData);
     if (validationError) {
-      return {
-        success: false,
-        error: validationError,
-      };
+      return Response.json(
+        { success: false, error: validationError },
+        { status: 400 }
+      );
     }
 
     const services = createServices(supabase);
-    const result = await services.tickets.createTicket(ticketData);
 
-    if (!result.success) {
-      return {
-        success: false,
-        error: result.error || "Failed to create ticket",
-      };
+    // Handle file uploads if present
+    const attachments: File[] = [];
+    for (const [key, value] of formData.entries()) {
+      if (key.startsWith("attachment_") && value instanceof File) {
+        attachments.push(value);
+      }
     }
 
-    console.log("✅ Ticket created successfully:", result.ticket?.id);
+    // Create the ticket
+    const result = await services.tickets.createTicket(ticketData);
+    console.log(result);
 
-    return {
-      success: true,
-      message: "Ticket created successfully!",
-      ticketId: result.ticket?.id,
-    };
+    if (!result.success || !result.ticket) {
+      return Response.json(
+        {
+          success: false,
+          error: result.error || "Failed to create ticket",
+        },
+        { status: 500 }
+      );
+    }
+
+    console.log("✅ Ticket created successfully:", result.ticket.id);
+
+    // Upload attachments if any (optional - implement if needed)
+    if (attachments.length > 0) {
+      console.log(`📎 ${attachments.length} attachments to upload`);
+      // TODO: Implement file upload to storage
+      // For now, we'll skip file uploads to avoid errors
+    }
+
+    // Redirect to the ticket details page
+    throw redirect(`/tickets/${result.ticket.id}`, {
+      headers: response.headers,
+    });
   } catch (error) {
     console.error("New ticket action error:", error);
-    return {
-      success: false,
-      error:
-        error instanceof Error ? error.message : "An unexpected error occurred",
-    };
+
+    // If it's a redirect, re-throw it
+    if (error instanceof Response) {
+      throw error;
+    }
+
+    return Response.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "An unexpected error occurred",
+      },
+      { status: 500 }
+    );
   }
 }
 
 // Component: Error Display
 function ErrorDisplay({ error }: { error: string }) {
   return (
-    <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+    <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 max-w-5xl mx-auto">
       <h3 className="font-semibold text-destructive mb-2">
-        Error Creating Ticket
+        Error Loading Page
       </h3>
       <p className="text-sm text-destructive/80">{error}</p>
     </div>
   );
 }
 
-// Component: Success Display
-function SuccessDisplay({
-  message,
-  ticketId,
-}: {
-  message: string;
-  ticketId?: string;
-}) {
-  return (
-    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-      <h3 className="font-semibold text-green-800 dark:text-green-200 mb-2">
-        Ticket Created Successfully!
-      </h3>
-      <p className="text-sm text-green-700 dark:text-green-300">
-        {message}
-        {ticketId && ` Ticket ID: ${ticketId}`}
-      </p>
-    </div>
-  );
-}
-
-// Component: Page Header
-function PageHeader() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold text-foreground">Create New Ticket</h1>
-      <p className="text-muted-foreground">
-        Submit a new support request and we'll get back to you as soon as
-        possible.
-      </p>
-    </div>
-  );
-}
-
-// Custom hook for form submission logic
-function useTicketSubmission() {
-  const navigate = useNavigate();
-  const submit = useSubmit();
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async (formData: TicketFormData) => {
-    setError(null);
-    setIsSubmitting(true);
-
-    try {
-      const submitFormData = new FormData();
-      submitFormData.append("title", formData.title);
-      submitFormData.append("description", formData.description);
-      submitFormData.append("priority", formData.priority);
-
-      if (formData.assigned_to) {
-        submitFormData.append("assigned_to", formData.assigned_to);
-      }
-
-      if (formData.attachments && formData.attachments.length > 0) {
-        formData.attachments.forEach((file, index) => {
-          submitFormData.append(`attachment_${index}`, file);
-        });
-      }
-
-      submit(submitFormData, { method: "post" });
-    } catch (err) {
-      setIsSubmitting(false);
-      setError(
-        err instanceof Error ? err.message : "An unexpected error occurred"
-      );
-    }
-  };
-
-  const handleActionResult = (actionData: NewTicketActionData | undefined) => {
-    if (!actionData) return;
-
-    setIsSubmitting(false);
-
-    if (actionData.success) {
-      if (actionData.ticketId) {
-        navigate(`/tickets/${actionData.ticketId}`);
-      } else {
-        navigate("/tickets");
-      }
-    } else {
-      setError(actionData.error || "Failed to create ticket");
-    }
-  };
-
-  return {
-    error,
-    isSubmitting,
-    handleSubmit,
-    handleActionResult,
-    setError,
-  };
-}
-
 // Main component
-export default function NewTicketPage({
-  loaderData,
-  actionData,
-}: Route.ComponentProps) {
+export default function NewTicketPage({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
-  const { error, isSubmitting, handleSubmit, handleActionResult } =
-    useTicketSubmission();
-
+  const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
   // Handle loader data
   if (!loaderData) {
     return <FormSkeleton />;
@@ -292,53 +205,75 @@ export default function NewTicketPage({
     return <FormSkeleton />;
   }
 
-  // Handle action results
-  useEffect(() => {
-    handleActionResult(actionData as NewTicketActionData);
-  }, [actionData, handleActionResult]);
-
   // Show loader error if present
   if (loaderError) {
     return (
-      <div className="max-w-full mx-auto space-y-6">
-        <PageHeader />
+      <div className="max-w-full mx-auto space-y-6 p-6">
         <ErrorDisplay error={loaderError} />
       </div>
     );
   }
 
-  const currentError =
-    error ||
-    (actionData && !(actionData as NewTicketActionData).success
-      ? (actionData as NewTicketActionData).error
-      : null);
+  const handleSubmit = async (formData: TicketFormData) => {
+    setError(null);
 
-  const showSuccess = actionData && (actionData as NewTicketActionData).success;
+    try {
+      const submitFormData = new FormData();
+      submitFormData.append("title", formData.title);
+      submitFormData.append("description", formData.description);
+      submitFormData.append("priority", formData.priority);
+
+      if (formData.assigned_to && formData.assigned_to !== "unassigned") {
+        submitFormData.append("assigned_to", formData.assigned_to);
+      }
+
+      // Add attachments if any
+      if (formData.attachments && formData.attachments.length > 0) {
+        formData.attachments.forEach((file, index) => {
+          submitFormData.append(`attachment_${index}`, file);
+        });
+      }
+
+      // Submit the form
+      const response = await fetch("/newtickets", {
+        method: "POST",
+        body: submitFormData,
+      });
+
+      // If response is a redirect, follow it
+      if (response.redirected) {
+        window.location.href = response.url;
+        return;
+      }
+
+      // If response is JSON, check for errors
+      if (response.headers.get("content-type")?.includes("application/json")) {
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error(data.error || "Failed to create ticket");
+        }
+      }
+
+      // If we get here and no redirect happened, navigate manually
+      navigate("/tickets");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "An unexpected error occurred"
+      );
+      throw err; // Re-throw to let the form handle it
+    }
+  };
 
   return (
-    <div className="max-w-full mx-auto space-y-6">
-      <PageHeader />
-
-      {/* Error Display */}
-      {currentError && <ErrorDisplay error={currentError} />}
-
-      {/* Success Display */}
-      {showSuccess && (
-        <SuccessDisplay
-          message={
-            (actionData as NewTicketActionData).message ||
-            "Ticket created successfully!"
-          }
-          ticketId={(actionData as NewTicketActionData).ticketId}
-        />
-      )}
+    <div className="max-w-full mx-auto space-y-6 p-6">
+      {error && <ErrorDisplay error={error} />}
 
       {/* Ticket Form */}
       <TicketForm
         onSubmit={handleSubmit}
         isEditing={false}
         assignableUsers={assignableUsers}
-        isSubmitting={isSubmitting}
+        isSubmitting={navigation.state === "submitting"}
       />
     </div>
   );

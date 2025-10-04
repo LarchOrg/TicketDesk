@@ -8,8 +8,8 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import { useState } from "react";
-import { redirect, useNavigate, useSubmit } from "react-router";
+import { useEffect, useState } from "react";
+import { redirect, useNavigate, useRevalidator, useSubmit } from "react-router";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
@@ -62,20 +62,25 @@ export async function loader({
   request,
 }: Route.LoaderArgs): Promise<AdminUsersLoaderData> {
   try {
-    const { supabase } = createSupabaseServerClient(request);
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { supabase, response } = createSupabaseServerClient(request);
 
-    if (!session) {
-      throw redirect("/login");
+    // Use getUser() instead of getSession() for security
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      throw redirect("/login", {
+        headers: response.headers,
+      });
     }
 
     // Check if user is admin
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .single();
 
     if (profile?.role !== "admin") {
@@ -90,6 +95,11 @@ export async function loader({
       total: users?.length || 0,
     };
   } catch (error) {
+    // If it's a redirect, re-throw it
+    if (error instanceof Response) {
+      throw error;
+    }
+
     console.error("Error loading users:", error);
     return {
       users: [],
@@ -103,20 +113,25 @@ export async function action({
   request,
 }: Route.ActionArgs): Promise<AdminUsersActionData> {
   try {
-    const { supabase } = createSupabaseServerClient(request);
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { supabase, response } = createSupabaseServerClient(request);
 
-    if (!session) {
-      throw redirect("/login");
+    // Use getUser() instead of getSession() for security
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      throw redirect("/login", {
+        headers: response.headers,
+      });
     }
 
     // Check if user is admin
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .single();
 
     if (profile?.role !== "admin") {
@@ -136,20 +151,20 @@ export async function action({
           role: newRole,
         });
 
-        if (result) {
+        if (result?.success) {
           return { success: true, message: "User role updated successfully" };
         } else {
-          return { error: "Failed to update user role" };
+          return { error: result?.error || "Failed to update user role" };
         }
       }
 
       case "deleteUser": {
         const result = await services.users.deleteUserProfile(userId);
 
-        if (result) {
+        if (result?.success) {
           return { success: true, message: "User deleted successfully" };
         } else {
-          return { error: "Failed to delete user" };
+          return { error: result?.error || "Failed to delete user" };
         }
       }
 
@@ -157,6 +172,11 @@ export async function action({
         return { error: "Invalid action" };
     }
   } catch (error) {
+    // If it's a redirect response, re-throw it
+    if (error instanceof Response) {
+      throw error;
+    }
+
     console.error("Error in admin users action:", error);
     return { error: "An error occurred while processing your request" };
   }
@@ -243,6 +263,19 @@ export default function AdminUsers({
   const submit = useSubmit();
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+
+  const revalidator = useRevalidator();
+
+  useEffect(() => {
+    if (actionData?.success) {
+      try {
+        revalidator.revalidate();
+      } catch (e) {
+        console.error("Failed to revalidate after action:", e);
+      }
+    }
+    // Only re-run when the success flag changes
+  }, [actionData?.success, revalidator]);
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
@@ -379,10 +412,12 @@ export default function AdminUsers({
               <TableBody>
                 {filteredUsers.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.name}</TableCell>
+                    <TableCell className="font-medium">
+                      {user.name || "N/A"}
+                    </TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
-                      <UserRoleBadge role={user.role} />
+                      <UserRoleBadge role={user.role || "user"} />
                     </TableCell>
                     <TableCell>
                       {user.created_at

@@ -23,20 +23,25 @@ export async function loader({
   request,
 }: Route.LoaderArgs): Promise<UserDashboardLoaderData> {
   try {
-    const { supabase } = createSupabaseServerClient(request);
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { supabase, response } = createSupabaseServerClient(request);
 
-    if (!session) {
-      throw redirect("/login");
+    // Use getUser() instead of getSession() for security
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      throw redirect("/login", {
+        headers: response.headers,
+      });
     }
 
     const services = createServices(supabase);
 
     // Get user's tickets only
     const userTickets = await services.tickets.getTickets({
-      created_by: session.user.id,
+      created_by: user.id,
       sortBy: "created_at",
       sortOrder: "desc",
       limit: 10,
@@ -44,7 +49,7 @@ export async function loader({
 
     // Get user's ticket stats
     const allUserTickets = await services.tickets.getTickets({
-      created_by: session.user.id,
+      created_by: user.id,
     });
 
     const stats = {
@@ -66,6 +71,11 @@ export async function loader({
       stats,
     };
   } catch (error) {
+    // If it's a redirect, re-throw it
+    if (error instanceof Response) {
+      throw error;
+    }
+
     console.error("Error loading user dashboard:", error);
     return {
       tickets: [],

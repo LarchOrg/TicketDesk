@@ -12,6 +12,7 @@ export default [
   route("newtickets", "routes/newtickets.tsx"),
   route("tickets/:ticketId", "routes/tickets.$ticketId.tsx"),
   route("my-tickets", "routes/my-tickets.tsx"),
+  route("user-dashboard", "routes/user-dashboard.tsx"),
 
   // Reports route (for agents and admins)
   route("reports", "routes/reports.tsx"),

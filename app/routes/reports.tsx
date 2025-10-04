@@ -59,20 +59,25 @@ export async function loader({
   request,
 }: Route.LoaderArgs): Promise<ReportsLoaderData> {
   try {
-    const { supabase } = createSupabaseServerClient(request);
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { supabase, response } = createSupabaseServerClient(request);
 
-    if (!session) {
-      throw redirect("/login");
+    // Use getUser() instead of getSession() for security
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      throw redirect("/login", {
+        headers: response.headers,
+      });
     }
 
     // Check if user has permission to view reports
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
-      .eq("id", session.user.id)
+      .eq("id", user.id)
       .single();
 
     if (!profile || !["agent", "admin"].includes(profile.role)) {
@@ -156,6 +161,11 @@ export async function loader({
       priorityBreakdown,
     };
   } catch (error) {
+    // If it's a redirect, re-throw it
+    if (error instanceof Response) {
+      throw error;
+    }
+
     console.error("Error loading reports:", error);
     return {
       stats: {
