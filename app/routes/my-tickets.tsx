@@ -303,14 +303,7 @@ export default function MyTickets({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Navigation Loading Indicator
-      {navigation.state === "loading" && (
-        <div className="fixed top-0 left-0 right-0 z-50">
-          <NavigationSkeleton />
-        </div>
-      )} */}
-
+    <div className="container mx-auto px-7 py-8">
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>

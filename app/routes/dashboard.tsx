@@ -743,7 +743,7 @@ export default function UnifiedDashboard({ loaderData }: Route.ComponentProps) {
       <div className="container mx-auto px-4 py-6 space-y-6">
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="space-y-1">
+          <div className="p-3">
             <h1 className="text-3xl font-bold tracking-tight">
               {getDashboardTitle()}
             </h1>

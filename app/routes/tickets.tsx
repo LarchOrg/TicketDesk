@@ -372,7 +372,7 @@ function PageHeader({
   }
   return (
     <div className="flex items-center justify-between">
-      <div>
+      <div className="p-4">
         <h1 className="text-3xl font-bold text-foreground">All Tickets</h1>
         <p className="text-muted-foreground">
           Manage and track all support tickets
@@ -531,7 +531,7 @@ function useTicketManagement() {
 export default function TicketsPage({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const actionData = useActionData() as TicketsActionData | undefined;
-  const { user, profile } = useAuth();
+  const { profile } = useAuth();
   const { toasts, removeToast, success, error } = useToast();
   const lastActionDataRef = useRef<TicketsActionData | undefined>(undefined);
 
