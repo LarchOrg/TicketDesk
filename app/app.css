@@ -488,3 +488,99 @@ body {
 .prose.max-w-none {
   max-width: none;
 }
+
+/* Calendar Date Range Picker Styles */
+.calendar-date-picker {
+  /* Smooth transitions for calendar interactions */
+  .calendar-date {
+    @apply transition-all duration-200 ease-in-out;
+  }
+
+  /* Range selection visual feedback */
+  .calendar-date.in-range {
+    @apply bg-primary/10 relative;
+  }
+
+  .calendar-date.in-range:before {
+    content: "";
+    @apply absolute inset-0 bg-primary/5 rounded-none;
+  }
+
+  /* Start and end date styling */
+  .calendar-date.range-start {
+    @apply rounded-l-md;
+  }
+
+  .calendar-date.range-end {
+    @apply rounded-r-md;
+  }
+
+  /* Hover effects for better UX */
+  .calendar-date:hover:not(.selected):not(:disabled) {
+    @apply bg-accent/50 scale-105;
+  }
+
+  /* Today indicator */
+  .calendar-date.today:not(.selected) {
+    @apply ring-1 ring-primary/30;
+  }
+
+  /* Disabled dates */
+  .calendar-date:disabled {
+    @apply opacity-30 cursor-not-allowed;
+  }
+}
+
+/* Quick range buttons styling */
+.quick-range-buttons {
+  .quick-range-btn {
+    @apply transition-all duration-150 ease-in-out;
+  }
+
+  .quick-range-btn:hover {
+    @apply scale-105 shadow-sm;
+  }
+}
+
+/* Calendar navigation */
+.calendar-nav {
+  .nav-button {
+    @apply transition-all duration-150 ease-in-out;
+  }
+
+  .nav-button:hover {
+    @apply scale-110 bg-accent;
+  }
+}
+
+/* Calendar popup animation */
+.calendar-popup {
+  @apply animate-in fade-in-0 zoom-in-95 slide-in-from-top-2;
+  animation-duration: 200ms;
+}
+
+/* Month/Year header styling */
+.calendar-header {
+  @apply font-semibold text-foreground;
+}
+
+/* Days of week header */
+.calendar-days-header {
+  @apply text-muted-foreground font-medium;
+}
+
+/* Manual input section */
+.manual-input-section {
+  @apply border-t border-border/50;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .calendar-date-picker {
+    @apply w-full max-w-sm;
+  }
+
+  .quick-range-buttons {
+    @apply grid-cols-1 gap-1;
+  }
+}

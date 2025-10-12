@@ -25,7 +25,6 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Separator } from "~/components/ui/separator";
-import { Textarea } from "~/components/ui/textarea";
 import { useAuth } from "~/contexts/AuthContext";
 import { getRoleColor, getRoleDisplayName } from "~/lib/role-utils";
 import { supabase } from "~/lib/supabaseClient";
@@ -35,7 +34,6 @@ import type { Route } from "./+types/profile";
 interface ProfileFormData {
   name: string;
   email: string;
-  bio?: string;
 }
 
 interface PasswordFormData {
@@ -50,7 +48,6 @@ const VALIDATION_RULES = {
   NAME_MAX_LENGTH: 50,
   EMAIL_REGEX: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
   MIN_PASSWORD_LENGTH: 6,
-  BIO_MAX_LENGTH: 500,
 } as const;
 
 // Utility functions
@@ -63,16 +60,6 @@ function validateName(name: string): string | null {
   }
   if (name.trim().length > VALIDATION_RULES.NAME_MAX_LENGTH) {
     return `Name must be less than ${VALIDATION_RULES.NAME_MAX_LENGTH} characters`;
-  }
-  return null;
-}
-
-function validateEmail(email: string): string | null {
-  if (!email.trim()) {
-    return "Email is required";
-  }
-  if (!VALIDATION_RULES.EMAIL_REGEX.test(email)) {
-    return "Please enter a valid email address";
   }
   return null;
 }
@@ -263,15 +250,6 @@ function ProfileHeader({ user, profile }: { user: any; profile: any }) {
               </div>
             </div>
 
-            {/* Bio */}
-            {profile?.bio && (
-              <div className="bg-muted/50 rounded-lg p-4 border border-border/50">
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {profile.bio}
-                </p>
-              </div>
-            )}
-
             {/* Stats Row */}
             <div className="flex flex-wrap gap-6 pt-2">
               <div className="flex items-center gap-2 text-sm">
@@ -318,9 +296,7 @@ function ProfileForm({
   success: string;
   loading: boolean;
   onSubmit: (e: React.FormEvent) => void;
-  onChange: (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
     <Card>
@@ -330,7 +306,8 @@ function ProfileForm({
           Personal Information
         </CardTitle>
         <CardDescription>
-          Update your personal details and profile information
+          Update your personal details and profile information Update your name
+          and personal details
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -358,45 +335,20 @@ function ProfileForm({
 
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
-                Email Address *
+                Email Address
               </Label>
               <Input
                 id="email"
                 name="email"
                 type="email"
                 value={formData.email}
-                onChange={onChange}
                 placeholder="Enter your email"
-                required
-                disabled={loading}
-                className="cursor-pointer transition-colors"
+                disabled={true}
+                className="bg-muted cursor-not-allowed"
               />
               <p className="text-xs text-muted-foreground">
-                Changing your email will require verification
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="bio" className="text-sm font-medium">
-              Bio (Optional)
-            </Label>
-            <Textarea
-              id="bio"
-              name="bio"
-              value={formData.bio || ""}
-              onChange={onChange}
-              placeholder="Tell us a bit about yourself..."
-              disabled={loading}
-              className="min-h-[100px] cursor-pointer transition-colors resize-none"
-              maxLength={VALIDATION_RULES.BIO_MAX_LENGTH}
-            />
-            <div className="flex justify-between items-center">
-              <p className="text-xs text-muted-foreground">
-                Share a brief description about yourself
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {(formData.bio || "").length}/{VALIDATION_RULES.BIO_MAX_LENGTH}
+                Email cannot be changed. Contact support if you need to update
+                your email.
               </p>
             </div>
           </div>
@@ -524,7 +476,6 @@ function useProfileForm() {
   const [formData, setFormData] = useState<ProfileFormData>({
     name: "",
     email: "",
-    bio: "",
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -536,7 +487,6 @@ function useProfileForm() {
       setFormData({
         name: profile.name || "",
         email: user.email || "",
-        bio: (profile as any).bio || "",
       });
     }
   }, [profile, user]);
@@ -544,7 +494,8 @@ function useProfileForm() {
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    const { name, value } = e.target;
+    const target = e.target as HTMLInputElement;
+    const { name, value } = target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (error) setError("");
     if (success) setSuccess("");
@@ -562,28 +513,14 @@ function useProfileForm() {
       return;
     }
 
-    const emailError = validateEmail(formData.email);
-    if (emailError) {
-      setError(emailError);
-      return;
-    }
-
-    if (formData.bio && formData.bio.length > VALIDATION_RULES.BIO_MAX_LENGTH) {
-      setError(
-        `Bio must be less than ${VALIDATION_RULES.BIO_MAX_LENGTH} characters`
-      );
-      return;
-    }
-
     setLoading(true);
 
     try {
-      // Update profile in database
+      // Update profile in database (only name, email is read-only)
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
           name: formData.name.trim(),
-          bio: formData.bio?.trim() || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", user?.id);
@@ -592,16 +529,7 @@ function useProfileForm() {
         throw updateError;
       }
 
-      // Update email if changed
-      if (formData.email !== user?.email) {
-        const { error: emailError } = await supabase.auth.updateUser({
-          email: formData.email.trim(),
-        });
-
-        if (emailError) {
-          throw emailError;
-        }
-      }
+      setSuccess("Profile updated successfully!");
 
       setSuccess("Profile updated successfully!");
     } catch (err: any) {

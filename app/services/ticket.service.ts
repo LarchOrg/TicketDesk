@@ -77,6 +77,18 @@ export function createTicketService(supabase: SupabaseClient) {
         query = query.eq("created_by", filters.created_by);
       }
 
+      // Apply date range filtering
+      if (filters?.date_from) {
+        query = query.gte("created_at", filters.date_from);
+      }
+
+      if (filters?.date_to) {
+        // Add one day to include the entire end date
+        const endDate = new Date(filters.date_to);
+        endDate.setDate(endDate.getDate() + 1);
+        query = query.lt("created_at", endDate.toISOString().split('T')[0]);
+      }
+
       // Apply sorting
       const sortBy = filters?.sortBy || "created_at";
       const sortOrder = filters?.sortOrder || "desc";

@@ -7,6 +7,7 @@ import {
   useNavigation,
   useSubmit,
 } from "react-router";
+import DateRangeFilter from "~/components/DateRangeFilter";
 import {
   DashboardSkeleton,
   TicketListSkeleton,
@@ -16,6 +17,14 @@ import TicketTable from "~/components/TicketTable";
 import { ToastContainer, useToast } from "~/components/Toast";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { useAuth } from "~/contexts/AuthContext";
 import { ROLE_PERMISSIONS } from "~/lib/role-utils";
 import { createSupabaseServerClient } from "~/lib/supabase-server";
@@ -32,6 +41,8 @@ interface TicketsLoaderData {
     status: string;
     priority: string;
     search: string;
+    date_from: string;
+    date_to: string;
   };
   error?: string;
 }
@@ -68,6 +79,8 @@ function parseFiltersFromUrl(url: URL): TicketFilters {
     status: url.searchParams.get("status") || undefined,
     priority: url.searchParams.get("priority") || undefined,
     search: url.searchParams.get("search") || undefined,
+    date_from: url.searchParams.get("date_from") || undefined,
+    date_to: url.searchParams.get("date_to") || undefined,
     sortBy: url.searchParams.get("sortBy") || DEFAULT_FILTERS.sortBy,
     sortOrder:
       (url.searchParams.get("sortOrder") as "asc" | "desc") ||
@@ -126,6 +139,8 @@ export async function loader({
           status: filters.status || "",
           priority: filters.priority || "",
           search: filters.search || "",
+          date_from: filters.date_from || "",
+          date_to: filters.date_to || "",
         },
         error: "Authentication error",
       };
@@ -153,6 +168,8 @@ export async function loader({
         status: filters.status || "",
         priority: filters.priority || "",
         search: filters.search || "",
+        date_from: filters.date_from || "",
+        date_to: filters.date_to || "",
       },
     };
   } catch (error) {
@@ -171,6 +188,8 @@ export async function loader({
         status: filters.status || "",
         priority: filters.priority || "",
         search: filters.search || "",
+        date_from: filters.date_from || "",
+        date_to: filters.date_to || "",
       },
       error: "Failed to fetch tickets",
     };
@@ -438,7 +457,117 @@ function EmptyState({ onCreateTicket }: { onCreateTicket: () => void }) {
       <p className="text-muted-foreground mb-4">
         No tickets found matching your criteria.
       </p>
-      <Button onClick={onCreateTicket}>Create your first ticket</Button>
+      <Button onClick={onCreateTicket}>Create Ticket</Button>
+    </div>
+  );
+}
+
+// Component: Filter Panel
+function FilterPanel({
+  filters,
+  onFilterChange,
+  disabled = false,
+}: {
+  filters: {
+    status: string;
+    priority: string;
+    search: string;
+    date_from: string;
+    date_to: string;
+  };
+  onFilterChange: (filters: Partial<TicketFilters>) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="w-full rounded-lg space-y-4 mb-6">
+      {/* Header */}
+      <h2 className="text-base font-semibold">Filters</h2>
+
+      {/* Filter Controls */}
+      <div className="flex flex-wrap items-center gap-6">
+        {/* Search Filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-muted-foreground">
+            Search
+          </label>
+          <Input
+            type="text"
+            placeholder="Search tickets..."
+            value={filters.search}
+            onChange={(e) => onFilterChange({ search: e.target.value })}
+            className="w-64"
+            disabled={disabled}
+          />
+        </div>
+
+        {/* Status Filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-muted-foreground">
+            Status
+          </label>
+          <Select
+            value={filters.status || "all"}
+            onValueChange={(value) =>
+              onFilterChange({
+                status: value === "all" ? undefined : (value as string),
+              })
+            }
+            disabled={disabled}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+              <SelectItem value="reopened">Reopened</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Priority Filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-muted-foreground">
+            Priority
+          </label>
+          <Select
+            value={filters.priority || "all"}
+            onValueChange={(value) =>
+              onFilterChange({
+                priority: value === "all" ? undefined : (value as string),
+              })
+            }
+            disabled={disabled}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All priorities" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priorities</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="critical">Critical</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Date Range Filter */}
+        <DateRangeFilter
+          dateFrom={filters.date_from || undefined}
+          dateTo={filters.date_to || undefined}
+          onDateRangeChange={(dateFrom, dateTo) =>
+            onFilterChange({
+              date_from: dateFrom,
+              date_to: dateTo,
+            })
+          }
+          disabled={disabled}
+        />
+      </div>
     </div>
   );
 }
@@ -462,7 +591,17 @@ function TicketsGrid({
           key={ticket.id}
           ticket={ticket}
           onClick={() => onTicketClick(ticket)}
-          onDelete={onDeleteTicket}
+          onDelete={
+            onDeleteTicket
+              ? async (ticketId: string) => {
+                  try {
+                    await onDeleteTicket(ticketId);
+                  } catch (error) {
+                    console.error("Failed to delete ticket", error);
+                  }
+                }
+              : undefined
+          }
           canDelete={canDelete}
         />
       ))}
@@ -542,8 +681,11 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
   const {
     tickets,
     stats,
+    filters,
     error: loaderError,
   } = loaderData as TicketsLoaderData;
+
+  const navigate = useNavigate();
 
   const {
     viewMode,
@@ -576,6 +718,23 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
   // Show loading state during navigation
   const isLoading = navigation.state === "loading";
 
+  // Handle filter changes
+  const handleFilterChange = (newFilters: Partial<TicketFilters>) => {
+    const url = new URL(window.location.href);
+
+    // Update URL parameters
+    Object.entries(newFilters).forEach(([key, value]) => {
+      if (value === undefined || value === "") {
+        url.searchParams.delete(key);
+      } else {
+        url.searchParams.set(key, String(value));
+      }
+    });
+
+    // Navigate to the new URL
+    navigate(`${url.pathname}${url.search}`, { replace: true });
+  };
+
   // Handle error state
   if (loaderError) {
     return (
@@ -606,6 +765,12 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
           />
 
           <StatsGrid stats={stats} />
+
+          <FilterPanel
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            disabled={isLoading}
+          />
 
           {/* Tickets Display */}
           {isLoading ? (

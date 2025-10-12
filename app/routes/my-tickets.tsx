@@ -1,6 +1,7 @@
 import { Plus, Search, Ticket } from "lucide-react";
 import { useState } from "react";
 import { redirect, useNavigate, useNavigation } from "react-router";
+import DateRangeFilter from "~/components/DateRangeFilter";
 import { TicketListSkeleton } from "../components/LoadingComponents";
 import StatusBadge from "../components/StatusBadge";
 import { Button } from "../components/ui/button";
@@ -47,12 +48,16 @@ export async function loader({
     const status = url.searchParams.get("status");
     const priority = url.searchParams.get("priority");
     const search = url.searchParams.get("search");
+    const dateFrom = url.searchParams.get("date_from");
+    const dateTo = url.searchParams.get("date_to");
 
     const filters: TicketFilters = {
       created_by: user.id, // Only show user's own tickets
       status: status as any,
       priority: priority as any,
       search: search || undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
       sortBy: "created_at",
       sortOrder: "desc",
       limit: 50,
@@ -98,7 +103,6 @@ export const meta = () => {
     },
   ];
 };
-
 function FilterPanel({
   filters,
   onFilterChange,
@@ -109,12 +113,13 @@ function FilterPanel({
   disabled?: boolean;
 }) {
   return (
-    <div className="w-full rounded-lg flex items-center gap-6 justify-between">
+    <div className="w-full rounded-lg space-y-4">
       {/* Header */}
       <h2 className="text-base font-semibold">Filters</h2>
 
-      {/* Status Filter */}
-      <div className="flex gap-6">
+      {/* Filter Controls */}
+      <div className="flex flex-wrap items-center gap-6">
+        {/* Status Filter */}
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-muted-foreground">
             Status
@@ -168,6 +173,19 @@ function FilterPanel({
             </SelectContent>
           </Select>
         </div>
+
+        {/* Date Range Filter */}
+        <DateRangeFilter
+          dateFrom={filters.date_from}
+          dateTo={filters.date_to}
+          onDateRangeChange={(dateFrom: any, dateTo: any) =>
+            onFilterChange({
+              date_from: dateFrom,
+              date_to: dateTo,
+            })
+          }
+          disabled={disabled}
+        />
       </div>
     </div>
   );
