@@ -216,7 +216,30 @@ function useResetPassword() {
       const accessToken = searchParams.get("access_token");
       const refreshToken = searchParams.get("refresh_token");
       const type = searchParams.get("type");
+      const code = searchParams.get("code");
 
+      // Handle PKCE flow (newer Supabase Auth)
+      if (code) {
+        try {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+          if (exchangeError) {
+            throw exchangeError;
+          }
+
+          setIsValidToken(true);
+          return;
+        } catch (err: any) {
+          console.error("Code exchange error:", err);
+          setIsValidToken(false);
+          setError(
+            "Invalid or expired reset link. Please request a new password reset."
+          );
+          return;
+        }
+      }
+
+      // Handle legacy flow (older Supabase Auth)
       if (!accessToken || !refreshToken || type !== "recovery") {
         setIsValidToken(false);
         setError(
