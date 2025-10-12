@@ -61,7 +61,7 @@ body {
   --radius: 0.75rem;
 
   /* Base Layout */
-  --background: oklch(98% 0.005 270); /* clean light white */
+  --background: rgb(247, 247, 247); /* clean light white */
   --foreground: oklch(20% 0.015 270); /* deep neutral gray text */
 
   /* Surfaces */

@@ -233,15 +233,11 @@ function ProfileHeader({ user, profile }: { user: any; profile: any }) {
           {/* Avatar Section */}
           <div className="flex-shrink-0">
             <div
-              className={`w-32 h-32 bg-gradient-to-br ${getRoleGradient(userRole || "user")} rounded-2xl flex items-center justify-center shadow-2xl border-4 border-white dark:border-gray-800 transform hover:scale-105 transition-transform duration-200`}
+              className={`w-28 h-28 bg-gradient-to-br ${getRoleGradient(userRole || "user")} rounded-2xl flex items-center justify-center shadow-2xl border-4 border-white dark:border-gray-800 transform hover:scale-105 transition-transform duration-200`}
             >
-              <span className="text-3xl font-bold text-white">
+              <span className="text-5xl font-bold text-white">
                 {getInitials(profile?.name, user?.email)}
               </span>
-            </div>
-            {/* Status Indicator */}
-            <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-green-500 rounded-full border-4 border-white dark:border-gray-800 flex items-center justify-center">
-              <div className="w-3 h-3 bg-white rounded-full"></div>
             </div>
           </div>
 

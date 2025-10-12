@@ -309,14 +309,14 @@ export default function LoginPage() {
               />
 
               <div className="mt-6 space-y-4">
-                <div className="text-center text-sm">
+                {/* <div className="text-center text-sm">
                   <Link
                     to="/forgot-password"
                     className="font-medium text-primary hover:underline"
                   >
                     Forgot your password?
                   </Link>
-                </div>
+                </div> */}
 
                 <div className="text-center text-sm">
                   <span className="text-muted-foreground">
