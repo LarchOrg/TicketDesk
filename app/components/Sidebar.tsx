@@ -88,7 +88,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
 
             <div>
               <h1 className="text-lg font-bold text-foreground leading-tight">
-                TicketDesk
+                HelpDesk
               </h1>
               <p className="text-xs text-muted-foreground leading-tight">
                 Support System

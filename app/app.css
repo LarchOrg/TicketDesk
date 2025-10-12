@@ -175,3 +175,316 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Rich Text Editor Styles */
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+  caret-color: var(--primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[contenteditable="true"]:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+}
+
+/* Lists in editor */
+[contenteditable="true"] ul,
+[contenteditable="true"] ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+[contenteditable="true"] ul {
+  list-style-type: disc;
+}
+
+[contenteditable="true"] ol {
+  list-style-type: decimal;
+}
+
+[contenteditable="true"] li {
+  margin: 0.25rem 0;
+  padding-left: 0.25rem;
+}
+
+/* Nested lists */
+[contenteditable="true"] ul ul,
+[contenteditable="true"] ol ul,
+[contenteditable="true"] ul ol,
+[contenteditable="true"] ol ol {
+  margin: 0.25rem 0;
+  padding-left: 1rem;
+}
+
+[contenteditable="true"] ul ul {
+  list-style-type: circle;
+}
+
+[contenteditable="true"] ul ul ul,
+[contenteditable="true"] ol ul ul {
+  list-style-type: square;
+}
+
+/* Blockquotes in editor */
+[contenteditable="true"] blockquote {
+  margin: 0.5rem 0;
+  padding: 0.5rem 1rem;
+  border-left: 4px solid var(--border);
+  background-color: var(--muted);
+  font-style: italic;
+  color: var(--muted-foreground);
+  border-radius: 4px;
+}
+
+/* Links in editor */
+[contenteditable="true"] a {
+  color: var(--primary);
+  text-decoration: underline;
+  cursor: pointer;
+  word-break: break-all;
+}
+
+[contenteditable="true"] a:hover {
+  color: var(--primary);
+  opacity: 0.8;
+}
+
+/* Text formatting */
+[contenteditable="true"] b,
+[contenteditable="true"] strong {
+  font-weight: 600;
+}
+
+[contenteditable="true"] i,
+[contenteditable="true"] em {
+  font-style: italic;
+}
+
+[contenteditable="true"] u {
+  text-decoration: underline;
+}
+
+/* Code and preformatted text */
+[contenteditable="true"] code {
+  background: rgba(27, 31, 35, 0.05);
+  padding: 0.15rem 0.3rem;
+  border-radius: 4px;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Segoe UI Mono",
+    "Helvetica Neue", monospace;
+  font-size: 0.9em;
+}
+
+[contenteditable="true"] pre {
+  background: var(--muted);
+  padding: 0.75rem;
+  border-radius: 6px;
+  overflow: auto;
+  margin: 0.5rem 0;
+}
+
+/* Headings */
+[contenteditable="true"] h1,
+[contenteditable="true"] h2,
+[contenteditable="true"] h3,
+[contenteditable="true"] h4,
+[contenteditable="true"] h5,
+[contenteditable="true"] h6 {
+  margin: 0.5rem 0;
+  font-weight: 600;
+}
+
+/* Paragraphs */
+[contenteditable="true"] p {
+  margin: 0.5rem 0;
+}
+
+[contenteditable="true"] p:first-child {
+  margin-top: 0;
+}
+
+[contenteditable="true"] p:last-child {
+  margin-bottom: 0;
+}
+
+/* Horizontal rule */
+[contenteditable="true"] hr {
+  border: none;
+  height: 1px;
+  background: var(--border);
+  margin: 0.75rem 0;
+  opacity: 0.6;
+}
+
+/* Images */
+[contenteditable="true"] img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.5rem 0;
+  border-radius: 4px;
+}
+
+/* Accessibility: focusable elements inside editor */
+[contenteditable="true"] a:focus,
+[contenteditable="true"] button:focus {
+  outline: 2px solid rgba(0, 0, 0, 0.08);
+  outline-offset: 2px;
+}
+
+/* Empty state */
+/* Empty state */
+[contenteditable="true"]:empty:before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  pointer-events: none;
+  display: block;
+}
+
+/* ===================================
+   Ticket Description Display Styles
+   (for viewing HTML content)
+   =================================== */
+
+/* Base prose styles for description display */
+.prose {
+  color: var(--foreground);
+  max-width: 65ch;
+}
+
+.prose :where(p):not(:where([class~="not-prose"] *)) {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose :where(p):first-child:not(:where([class~="not-prose"] *)) {
+  margin-top: 0;
+}
+
+.prose :where(p):last-child:not(:where([class~="not-prose"] *)) {
+  margin-bottom: 0;
+}
+
+/* Bold text */
+.prose :where(b, strong):not(:where([class~="not-prose"] *)) {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* Italic text */
+.prose :where(i, em):not(:where([class~="not-prose"] *)) {
+  font-style: italic;
+}
+
+/* Underline text */
+.prose :where(u):not(:where([class~="not-prose"] *)) {
+  text-decoration: underline;
+}
+
+/* Lists */
+.prose :where(ul, ol):not(:where([class~="not-prose"] *)) {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-left: 1.5rem;
+}
+
+.prose :where(ul):not(:where([class~="not-prose"] *)) {
+  list-style-type: disc;
+}
+
+.prose :where(ol):not(:where([class~="not-prose"] *)) {
+  list-style-type: decimal;
+}
+
+.prose :where(li):not(:where([class~="not-prose"] *)) {
+  margin: 0.25rem 0;
+  padding-left: 0.25rem;
+}
+
+/* Nested lists */
+.prose :where(ul ul, ol ul):not(:where([class~="not-prose"] *)) {
+  list-style-type: circle;
+  margin: 0.25rem 0;
+  padding-left: 1rem;
+}
+
+.prose :where(ul ul ul, ol ul ul):not(:where([class~="not-prose"] *)) {
+  list-style-type: square;
+}
+
+.prose :where(ol ol, ul ol):not(:where([class~="not-prose"] *)) {
+  margin: 0.25rem 0;
+  padding-left: 1rem;
+}
+
+/* Blockquotes */
+.prose :where(blockquote):not(:where([class~="not-prose"] *)) {
+  margin: 0.5rem 0;
+  padding: 0.5rem 1rem;
+  border-left: 4px solid var(--border);
+  background-color: var(--muted);
+  font-style: italic;
+  color: var(--muted-foreground);
+  border-radius: 4px;
+}
+
+/* Links */
+.prose :where(a):not(:where([class~="not-prose"] *)) {
+  color: var(--primary);
+  text-decoration: underline;
+  cursor: pointer;
+  word-break: break-word;
+}
+
+.prose :where(a):hover:not(:where([class~="not-prose"] *)) {
+  opacity: 0.8;
+}
+
+/* Divs (preserve structure) */
+.prose :where(div):not(:where([class~="not-prose"] *)) {
+  margin: 0;
+}
+
+/* Horizontal rule */
+.prose :where(hr):not(:where([class~="not-prose"] *)) {
+  border: none;
+  height: 1px;
+  background: var(--border);
+  margin: 0.75rem 0;
+  opacity: 0.6;
+}
+
+/* Images */
+.prose :where(img):not(:where([class~="not-prose"] *)) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.5rem 0;
+  border-radius: 4px;
+}
+
+/* Dark mode adjustments */
+.dark .prose {
+  color: var(--foreground);
+}
+
+.dark .prose :where(blockquote):not(:where([class~="not-prose"] *)) {
+  border-left-color: var(--border);
+  background-color: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.dark .prose :where(a):not(:where([class~="not-prose"] *)) {
+  color: var(--primary);
+}
+
+/* Max width none utility */
+.prose.max-w-none {
+  max-width: none;
+}

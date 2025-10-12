@@ -1,61 +1,79 @@
 import {
-  Bell,
-  Filter,
+  BarChart3,
+  ChevronDown,
+  FileText,
+  Home,
   LogOut,
   Menu,
   Moon,
-  MoreHorizontal,
   Plus,
   Settings,
-  Shield,
   Sun,
+  Ticket,
   User,
   Users,
   X,
 } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { useAuth } from "~/contexts/AuthContext";
 import {
   getRoleColor,
   getRoleDisplayName,
-  useRolePermissions,
+  ROLE_PERMISSIONS,
 } from "~/lib/role-utils";
+import NotificationDropdown from "./NotificationDropdown";
 import { Button } from "./ui/button";
 
+// Simplified / stricter props for the redesigned navbar
 interface NavbarProps {
-  showSearch?: boolean;
-  onSearch?: (query: string) => void;
-  onFilter?: () => void;
-  darkMode?: boolean;
-  onToggleDarkMode?: () => void;
-  onCreateTicket?: () => void;
-  sidebarOpen?: boolean;
-  onToggleSidebar?: () => void;
+  darkMode: boolean;
+  onToggleDarkMode: () => void;
+  onCreateTicket: () => void;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
 }
 
+// Page title mapping
+const PAGE_TITLES: Record<string, { title: string; icon: React.ReactNode }> = {
+  "/": { title: "Dashboard", icon: <Home className="w-5 h-5" /> },
+  "/tickets": { title: "All Tickets", icon: <Ticket className="w-5 h-5" /> },
+  "/analytics": { title: "Analytics", icon: <BarChart3 className="w-5 h-5" /> },
+  "/my-tickets": {
+    title: "My Tickets",
+    icon: <FileText className="w-5 h-5" />,
+  },
+  "/newtickets": { title: "New Ticket", icon: <Plus className="w-5 h-5" /> },
+  "/reports": { title: "Reports", icon: <BarChart3 className="w-5 h-5" /> },
+  "/profile": { title: "Profile", icon: <User className="w-5 h-5" /> },
+  "/admin/users": {
+    title: "User Management",
+    icon: <Users className="w-5 h-5" />,
+  },
+  "/admin/settings": {
+    title: "Admin Settings",
+    icon: <Settings className="w-5 h-5" />,
+  },
+};
+
 export function Navbar({
-  showSearch = true,
-  onSearch,
-  onFilter,
-  darkMode = false,
+  darkMode,
   onToggleDarkMode,
   onCreateTicket,
-  sidebarOpen = true,
+  sidebarOpen,
   onToggleSidebar,
 }: NavbarProps) {
   const { user, profile, signOut } = useAuth();
-  const permissions = useRolePermissions();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [signingOut, setSigningOut] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const navigate = useNavigate();
 
   const handleSignOut = async () => {
+    setSigningOut(true);
     try {
-      console.log("🚪 Signing out...");
-      setSigningOut(true);
-      navigate("/login");
       await signOut();
+      navigate("/login");
     } catch (error) {
       console.error("Sign out error:", error);
     } finally {
@@ -63,232 +81,221 @@ export function Navbar({
     }
   };
 
+  // Get current page info
+  const currentPage = PAGE_TITLES[location.pathname] || {
+    title: "HelpDesk",
+    icon: <Home className="w-5 h-5" />,
+  };
+
+  // Check if user can access admin features
+  const userRole = profile?.role as "admin" | "agent" | "user" | undefined;
+  const canAccessAdmin = userRole && ROLE_PERMISSIONS[userRole]?.canManageUsers;
+
   return (
-    <nav className="bg-card border-b border-border shadow-sm sticky top-0 z-40 h-18">
-      <div className="h-full px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-full">
-          {/* Left Section - Menu Toggle and Search */}
-          <div className="flex items-center space-x-4 flex-1">
-            {/* Mobile Menu Toggle */}
-            {onToggleSidebar && (
-              <Button
-                onClick={onToggleSidebar}
-                variant="ghost"
-                size="sm"
-                className="lg:hidden p-2 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-              >
-                {sidebarOpen ? (
-                  <X className="w-5 h-5" />
-                ) : (
-                  <Menu className="w-5 h-5" />
-                )}
-              </Button>
-            )}
+    <nav className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container mx-auto px-4">
+        <div className="flex h-16 items-center justify-between">
+          {/* Left Section - Logo, Menu Toggle, and Page Title */}
+          <div className="flex items-center gap-4">
+            {/* Mobile menu toggle */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleSidebar}
+              className="cursor-pointer hover:bg-muted transition-colors lg:hidden"
+              aria-label="Toggle sidebar"
+            >
+              {sidebarOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
+            </Button>
+
+            {/* Page Title */}
+            <div className="hidden md:flex items-center gap-4 ml-3 border-border">
+              {currentPage.icon}
+              <h1 className="text-lg font-semibold text-foreground">
+                {currentPage.title}
+              </h1>
+            </div>
           </div>
 
-          {/* Right Section */}
-          <div className="flex items-center space-x-1">
-            {user ? (
-              <>
-                {/* Create Ticket Button */}
-                {onCreateTicket && (
-                  <Button
-                    onClick={onCreateTicket}
-                    size="sm"
-                    className="hidden sm:flex items-center space-x-2 bg-primary hover:bg-primary/90 px-4 py-2 h-9"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span className="font-medium">New Ticket</span>
-                  </Button>
-                )}
+          {/* Right Section - Actions and User Menu */}
+          <div className="flex items-center gap-3">
+            {/* New Ticket Button */}
+            <Button
+              onClick={onCreateTicket}
+              className="cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm transition-all duration-200 hover:shadow-md hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg font-medium"
+            >
+              <Plus className="h-4 w-4" />
+              New Ticket
+            </Button>
 
-                {/* Filter Button */}
-                {onFilter && (
-                  <Button
-                    onClick={onFilter}
-                    variant="ghost"
-                    size="sm"
-                    className="p-2 h-9 w-9 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    title="Filter tickets"
-                  >
-                    <Filter className="w-4 h-4" />
-                  </Button>
-                )}
+            {/* Mobile New Ticket Button */}
+            <Button
+              onClick={onCreateTicket}
+              size="sm"
+              className="cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm transition-all duration-200 hover:shadow-md sm:hidden rounded-lg"
+              aria-label="Create new ticket"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
 
-                {/* Dark Mode Toggle */}
-                {onToggleDarkMode && (
-                  <Button
-                    onClick={onToggleDarkMode}
-                    variant="ghost"
-                    size="sm"
-                    className="p-2 h-9 w-9 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    title={
-                      darkMode ? "Switch to light mode" : "Switch to dark mode"
-                    }
-                  >
-                    {darkMode ? (
-                      <Sun className="w-4 h-4" />
-                    ) : (
-                      <Moon className="w-4 h-4" />
-                    )}
-                  </Button>
-                )}
+            {/* Dark Mode Toggle */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleDarkMode}
+              className="cursor-pointer hover:bg-muted transition-colors rounded-lg"
+              aria-label="Toggle dark mode"
+            >
+              {darkMode ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </Button>
 
-                {/* Notifications */}
+            {/* Notifications */}
+            {user && <NotificationDropdown />}
+
+            {/* User Menu */}
+            {user && profile ? (
+              <div className="relative">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="relative p-2 h-9 w-9 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  title="Notifications"
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="cursor-pointer hover:bg-muted transition-colors flex items-center gap-2 px-3 py-2 rounded-lg"
+                  aria-label="User menu"
                 >
-                  <Bell className="w-4 h-4" />
-                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-destructive rounded-full flex items-center justify-center">
-                    <span className="text-[10px] text-destructive-foreground font-bold leading-none">
-                      3
-                    </span>
-                  </span>
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
+                    {profile.name?.charAt(0)?.toUpperCase() ||
+                      user.email?.charAt(0)?.toUpperCase() ||
+                      "U"}
+                  </div>
+                  <div className="hidden md:block text-left">
+                    <div className="text-sm font-medium text-foreground">
+                      {profile.name || user.email?.split("@")[0]}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {getRoleDisplayName(userRole || "user")}
+                    </div>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </Button>
 
-                {/* Settings */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="p-2 h-9 w-9 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  title="Settings"
-                >
-                  <Settings className="w-4 h-4" />
-                </Button>
+                {/* User Dropdown Menu */}
+                {showUserMenu && (
+                  <>
+                    {/* Backdrop */}
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowUserMenu(false)}
+                    />
 
-                {/* User Menu */}
-                <div className="relative ml-2">
-                  <Button
-                    onClick={() => setShowUserMenu(!showUserMenu)}
-                    variant="ghost"
-                    className="flex items-center space-x-3 p-2 h-10 hover:bg-muted rounded-lg transition-colors"
-                  >
-                    <div className="w-7 h-7 bg-gradient-to-br from-primary to-primary/80 rounded-full flex items-center justify-center shadow-sm">
-                      <span className="text-xs font-bold text-primary-foreground">
-                        {profile?.name?.charAt(0)?.toUpperCase() ||
-                          user.email?.charAt(0)?.toUpperCase() ||
-                          "U"}
-                      </span>
-                    </div>
-                    <div className="hidden md:block text-left">
-                      <p className="text-sm font-medium text-foreground leading-tight">
-                        {profile?.name || user.email?.split("@")[0] || "User"}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${getRoleColor((profile?.role as any) || "user")}`}
-                        >
-                          {getRoleDisplayName((profile?.role as any) || "user")}
-                        </span>
-                      </div>
-                    </div>
-                    <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-                  </Button>
-
-                  {/* User Dropdown Menu */}
-                  {showUserMenu && (
-                    <div className="absolute right-0 mt-2 w-64 bg-card border border-border rounded-xl shadow-lg py-2 z-50">
+                    {/* Menu */}
+                    <div className="absolute right-0 top-full mt-2 w-64 z-50 rounded-lg border border-border bg-background shadow-lg">
+                      {/* User Info Header */}
                       <div className="px-4 py-3 border-b border-border">
-                        <p className="text-sm font-medium text-foreground">
-                          {profile?.name || user.email?.split("@")[0] || "User"}
-                        </p>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          {user.email}
-                        </p>
-                        <span
-                          className={`text-xs px-2 py-1 rounded-full font-medium ${getRoleColor((profile?.role as any) || "user")}`}
-                        >
-                          {getRoleDisplayName((profile?.role as any) || "user")}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-medium">
+                            {profile.name?.charAt(0)?.toUpperCase() ||
+                              user.email?.charAt(0)?.toUpperCase() ||
+                              "U"}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-foreground truncate">
+                              {profile.name || user.email?.split("@")[0]}
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {user.email}
+                            </div>
+                            <div
+                              className={`text-xs px-2 py-1 rounded-full font-medium mt-1 inline-block ${getRoleColor(userRole || "user")}`}
+                            >
+                              {getRoleDisplayName(userRole || "user")}
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
+                      {/* Menu Items */}
                       <div className="py-2">
-                        <button className="flex items-center space-x-3 w-full px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors">
-                          <User className="w-4 h-4" />
-                          <span>Profile</span>
-                        </button>
-                        <button className="flex items-center space-x-3 w-full px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors">
-                          <Settings className="w-4 h-4" />
-                          <span>Settings</span>
-                        </button>
+                        <Link
+                          to="/profile"
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex items-center gap-3 px-4 py-2 text-sm text-foreground hover:bg-muted cursor-pointer transition-colors"
+                        >
+                          <User className="h-4 w-4" />
+                          Profile Settings
+                        </Link>
 
-                        {/* Admin-only options */}
-                        {permissions.canManageUsers && (
+                        {canAccessAdmin && (
                           <>
-                            <div className="border-t border-border my-2"></div>
-                            <div className="px-4 py-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Admin Tools
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => navigate("/admin/users")}
-                              className="flex items-center space-x-3 w-full px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                            <div className="my-1 border-t border-border" />
+                            <Link
+                              to="/admin/users"
+                              onClick={() => setShowUserMenu(false)}
+                              className="flex items-center gap-3 px-4 py-2 text-sm text-foreground hover:bg-muted cursor-pointer transition-colors"
                             >
-                              <Users className="w-4 h-4" />
-                              <span>Manage Users</span>
-                            </button>
-                            <button
-                              onClick={() => navigate("/admin/settings")}
-                              className="flex items-center space-x-3 w-full px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                              <Users className="h-4 w-4" />
+                              User Management
+                            </Link>
+                            <Link
+                              to="/admin/settings"
+                              onClick={() => setShowUserMenu(false)}
+                              className="flex items-center gap-3 px-4 py-2 text-sm text-foreground hover:bg-muted cursor-pointer transition-colors"
                             >
-                              <Shield className="w-4 h-4" />
-                              <span>System Settings</span>
-                            </button>
+                              <Settings className="h-4 w-4" />
+                              Admin Settings
+                            </Link>
                           </>
                         )}
-                      </div>
 
-                      <div className="border-t border-border pt-2">
+                        <div className="my-1 border-t border-border" />
                         <button
-                          onClick={handleSignOut}
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            handleSignOut();
+                          }}
                           disabled={signingOut}
-                          className="flex items-center space-x-3 w-full px-4 py-2 text-sm text-destructive hover:bg-muted transition-colors"
+                          className="flex w-full items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer transition-colors disabled:opacity-50"
                         >
-                          <LogOut className="w-4 h-4" />
-                          <span>
-                            {signingOut ? "Signing Out..." : "Sign Out"}
-                          </span>
+                          <LogOut className="h-4 w-4" />
+                          {signingOut ? "Signing out..." : "Sign out"}
                         </button>
                       </div>
                     </div>
-                  )}
-                </div>
-              </>
+                  </>
+                )}
+              </div>
             ) : (
-              <div className="flex items-center space-x-3">
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <Link to="/login">Sign In</Link>
-                </Button>
-                <Button
-                  asChild
-                  size="sm"
-                  className="bg-primary hover:bg-primary/90"
-                >
-                  <Link to="/signup">Sign Up</Link>
-                </Button>
+              /* Login/Signup buttons for unauthenticated users */
+              <div className="flex items-center gap-2">
+                <Link to="/login">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="cursor-pointer hover:bg-muted transition-colors"
+                  >
+                    Sign in
+                  </Button>
+                </Link>
+                <Link to="/signup">
+                  <Button
+                    size="sm"
+                    className="cursor-pointer bg-primary hover:bg-primary/90 transition-colors"
+                  >
+                    Sign up
+                  </Button>
+                </Link>
               </div>
             )}
           </div>
         </div>
       </div>
-
-      {/* Click outside to close user menu */}
-      {showUserMenu && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setShowUserMenu(false)}
-        />
-      )}
     </nav>
   );
 }

@@ -21,11 +21,6 @@ interface LoginFormData {
   password: string;
 }
 
-interface UserProfile {
-  role: "admin" | "agent" | "user";
-  name: string;
-}
-
 // Constants
 const VALIDATION_RULES = {
   EMAIL_REGEX: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
@@ -76,8 +71,8 @@ function getRedirectPath(role: string): string {
 // Meta function
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Login - TicketDesk" },
-    { name: "description", content: "Sign in to your TicketDesk account" },
+    { title: "Login - HelpDesk" },
+    { name: "description", content: "Sign in to your HelpDesk account" },
   ];
 }
 
@@ -181,7 +176,11 @@ function LoginForm({
         />
       </div>
 
-      <Button type="submit" className="w-full" disabled={loading}>
+      <Button
+        type="submit"
+        className="w-full cursor-pointer"
+        disabled={loading}
+      >
         {loading ? "Signing in..." : "Sign in"}
       </Button>
     </form>
@@ -309,16 +308,27 @@ export default function LoginPage() {
                 onChange={handleChange}
               />
 
-              <div className="mt-6 text-center text-sm">
-                <span className="text-muted-foreground">
-                  Don't have an account?{" "}
-                </span>
-                <Link
-                  to="/signup"
-                  className="font-medium text-primary hover:underline"
-                >
-                  Sign up
-                </Link>
+              <div className="mt-6 space-y-4">
+                <div className="text-center text-sm">
+                  <Link
+                    to="/forgot-password"
+                    className="font-medium text-primary hover:underline"
+                  >
+                    Forgot your password?
+                  </Link>
+                </div>
+
+                <div className="text-center text-sm">
+                  <span className="text-muted-foreground">
+                    Don't have an account?{" "}
+                  </span>
+                  <Link
+                    to="/signup"
+                    className="font-medium text-primary hover:underline"
+                  >
+                    Sign up
+                  </Link>
+                </div>
               </div>
             </CardContent>
           </Card>

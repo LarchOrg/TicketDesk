@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAttachmentService } from "./attachment.service";
 import { createCommentService } from "./comment.service";
+import { createNotificationService } from "./notification.service";
 import { createTicketService } from "./ticket.service";
 import { createUserService } from "./user.service";
 
@@ -14,6 +15,7 @@ export function createServices(supabase: SupabaseClient) {
     comments: createCommentService(supabase),
     users: createUserService(supabase),
     attachments: createAttachmentService(supabase),
+    notifications: createNotificationService(supabase),
   };
 }
 
@@ -21,6 +23,7 @@ export function createServices(supabase: SupabaseClient) {
 export {
   createAttachmentService,
   createCommentService,
+  createNotificationService,
   createTicketService,
   createUserService,
 };

@@ -24,8 +24,8 @@ function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Check if current page is an auth page (login/signup)
-  const isAuthPage = /^\/(login|signup)(\/|$)/.test(location.pathname);
+  // Check if current page is an auth page (login/signup/forgot-password/reset-password)
+  const isAuthPage = /^\/(login|signup|forgot-password|reset-password)(\/|$)/.test(location.pathname);
 
   const handleCreateTicket = useCallback(
     () => navigate("/newtickets"),
@@ -40,9 +40,12 @@ function AppLayout() {
     }
   }, [loading, user, isAuthPage, navigate]);
 
+  // Instead of early returns after hooks, use conditional rendering
+  let content: React.ReactNode = null;
+
   // Show loading state while checking authentication
   if (loading) {
-    return (
+    content = (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
@@ -50,80 +53,78 @@ function AppLayout() {
         </div>
       </div>
     );
-  }
-
-  // If on auth page, just render the outlet without layout
-  if (isAuthPage) {
-    return (
+  } else if (isAuthPage) {
+    // If on auth page, just render the outlet without layout
+    content = (
       <div className="min-h-screen bg-background">
         <Outlet />
       </div>
     );
-  }
-
-  // If not authenticated, render nothing (useEffect will redirect)
-  if (!user) {
-    return null;
-  }
-
-  // Main authenticated layout
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="flex h-screen">
-        {/* Desktop Sidebar */}
-        <div
-          className={`${
-            sidebarOpen ? "w-72" : "w-16"
-          } transition-all duration-300 ease-in-out flex-shrink-0 hidden lg:block`}
-        >
-          <div className="h-full">
-            <Sidebar collapsed={!sidebarOpen} />
-          </div>
-        </div>
-
-        {/* Mobile Sidebar */}
-        <div
-          className={`fixed inset-y-0 left-0 z-50 w-72 transform transition-transform duration-300 ease-in-out lg:hidden ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
-        >
-          <div className="h-full bg-card shadow-xl">
-            <Sidebar collapsed={false} />
-          </div>
-        </div>
-
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-          {/* Navbar */}
-          <div className="flex-shrink-0">
-            <Navbar
-              showSearch={true}
-              darkMode={darkMode}
-              onToggleDarkMode={toggleDarkMode}
-              onCreateTicket={handleCreateTicket}
-              sidebarOpen={sidebarOpen}
-              onToggleSidebar={toggleSidebar}
-            />
-          </div>
-
-          {/* Main content */}
-          <main className="flex-1 overflow-auto bg-background">
-            <div className="max-w-full">
-              <Outlet />
+  } else if (!user) {
+    // If not authenticated, render nothing (useEffect will redirect)
+    content = null;
+  } else {
+    // Main authenticated layout
+    content = (
+      <div className="min-h-screen bg-background">
+        <div className="flex h-screen">
+          {/* Desktop Sidebar */}
+          <div
+            className={`${
+              sidebarOpen ? "w-72" : "w-16"
+            } transition-all duration-300 ease-in-out flex-shrink-0 hidden lg:block`}
+          >
+            <div className="h-full">
+              <Sidebar collapsed={!sidebarOpen} />
             </div>
-          </main>
-        </div>
-      </div>
+          </div>
 
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 lg:hidden z-40"
-          onClick={toggleSidebar}
-        />
-      )}
-    </div>
-  );
+          {/* Mobile Sidebar */}
+          <div
+            className={`fixed inset-y-0 left-0 z-50 w-72 transform transition-transform duration-300 ease-in-out lg:hidden ${
+              sidebarOpen ? "translate-x-0" : "-translate-x-full"
+            }`}
+          >
+            <div className="h-full bg-card shadow-xl">
+              <Sidebar collapsed={false} />
+            </div>
+          </div>
+
+          {/* Main Content Area */}
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+            {/* Navbar */}
+            <div className="flex-shrink-0">
+              <Navbar
+                darkMode={darkMode}
+                onToggleDarkMode={toggleDarkMode}
+                onCreateTicket={handleCreateTicket}
+                sidebarOpen={sidebarOpen}
+                onToggleSidebar={toggleSidebar}
+              />
+            </div>
+
+            {/* Main content */}
+            <main className="flex-1 overflow-auto bg-background">
+              <div className="max-w-full">
+                <Outlet />
+              </div>
+            </main>
+          </div>
+        </div>
+
+        {/* Mobile sidebar overlay */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 lg:hidden z-40"
+            onClick={toggleSidebar}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // Return the computed content directly to avoid stray/duplicate JSX closures
+  return content;
 }
 
 export const links: Route.LinksFunction = () => [
@@ -178,8 +179,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let details = "An unexpected error occurred.";
   let stack: string | undefined;
   let statusCode: number | undefined;
+  console.log(stack, "stack");
 
   if (isRouteErrorResponse(error)) {
+    console.log(error, "error");
     statusCode = error.status;
     message = error.status === 404 ? "Page Not Found" : `Error ${error.status}`;
     details =
@@ -187,6 +190,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         ? "The page you're looking for doesn't exist."
         : error.statusText || details;
   } else if (import.meta.env.DEV && error && error instanceof Error) {
+    console.log(error, "WRRR");
     details = error.message;
     stack = error.stack;
   }

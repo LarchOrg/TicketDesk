@@ -30,47 +30,84 @@ export function createAttachmentService(supabase: SupabaseClient) {
       uploadedBy: string
     ): Promise<{ success: boolean; attachment?: Attachment; error?: string }> {
       try {
-        // Generate unique filename
-        const fileExt = file.name.split(".").pop();
-        const fileName = `${ticketId}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        console.log(
+          `📎 Starting upload for file: ${file.name} (${file.size} bytes)`
+        );
+
+        // Validate file
+        if (!file || file.size === 0) {
+          console.error("❌ Invalid file: empty or null");
+          return { success: false, error: "Invalid file" };
+        }
+
+        // Generate unique filename - preserve original name but make it unique and safe
+        const timestamp = Date.now();
+        const randomStr = Math.random().toString(36).substring(2, 15);
+
+        // Sanitize the filename to remove special characters but preserve dots, underscores and hyphens
+        const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+        const fileName = `${ticketId}/${timestamp}-${randomStr}-${sanitizedFileName}`;
+
+        console.log(`📁 Uploading to path: ${fileName}`);
 
         // Upload file to storage
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from("ticket-attachments")
-          .upload(fileName, file);
+          .upload(fileName, file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
 
         if (uploadError) {
-          console.error("Error uploading file:", uploadError);
-          return { success: false, error: uploadError.message };
+          console.error("❌ Storage upload error:", uploadError);
+          return {
+            success: false,
+            error: `Storage error: ${uploadError.message}`,
+          };
         }
 
+        console.log(`✅ File uploaded to storage: ${uploadData.path}`);
+
         // Create attachment record
+        const attachmentData = {
+          ticket_id: ticketId,
+          file_name: file.name,
+          storage_path: uploadData.path,
+          file_size: file.size,
+          file_type: file.type || "application/octet-stream",
+          uploaded_by: uploadedBy,
+        };
+
+        console.log(`💾 Creating database record:`, attachmentData);
+
         const { data, error } = await supabase
           .from("attachments")
-          .insert({
-            ticket_id: ticketId,
-            filename: file.name,
-            file_path: uploadData.path,
-            file_size: file.size,
-            content_type: file.type,
-            uploaded_by: uploadedBy,
-          })
+          .insert(attachmentData)
           .select("*")
           .single();
 
         if (error) {
-          console.error("Error creating attachment record:", error);
+          console.error("❌ Database insert error:", error);
           // Clean up uploaded file if database insert fails
+          console.log(`🧹 Cleaning up uploaded file: ${uploadData.path}`);
           await supabase.storage
             .from("ticket-attachments")
             .remove([uploadData.path]);
-          return { success: false, error: error.message };
+          return { success: false, error: `Database error: ${error.message}` };
         }
 
+        console.log(`✅ Attachment record created:`, data.id);
         return { success: true, attachment: data };
       } catch (error) {
-        console.error("Error in uploadAttachment:", error);
-        return { success: false, error: "Failed to upload attachment" };
+        console.error("❌ Unexpected error in uploadAttachment:", error);
+        return {
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to upload attachment",
+        };
       }
     },
 
@@ -101,7 +138,7 @@ export function createAttachmentService(supabase: SupabaseClient) {
       // First get the attachment to know the file path
       const { data: attachment, error: fetchError } = await supabase
         .from("attachments")
-        .select("file_path")
+        .select("storage_path")
         .eq("id", attachmentId)
         .single();
 
@@ -113,7 +150,7 @@ export function createAttachmentService(supabase: SupabaseClient) {
       // Delete from storage
       const { error: storageError } = await supabase.storage
         .from("ticket-attachments")
-        .remove([attachment.file_path]);
+        .remove([attachment.storage_path]);
 
       if (storageError) {
         console.error("Error deleting file from storage:", storageError);

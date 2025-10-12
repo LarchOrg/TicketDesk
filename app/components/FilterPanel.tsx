@@ -17,6 +17,9 @@ export default function FilterPanel({
 }: FilterPanelProps) {
   const [localFilters, setLocalFilters] = useState(filters);
 
+  // Ensure hook calls run before any early return to avoid mismatched hooks
+  if (!isOpen) return null;
+
   const statusOptions: { value: string; label: string }[] = [
     { value: "all", label: "All Status" },
     { value: "open", label: "Open" },
@@ -45,15 +48,10 @@ export default function FilterPanel({
     onFiltersChange(resetFilters);
   };
 
-  if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
       {/* Panel */}
       <div className="absolute right-0 top-0 h-full w-96 bg-card shadow-2xl transform transition-transform border-l border-border">

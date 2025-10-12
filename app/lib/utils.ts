@@ -104,6 +104,96 @@ export function isImageFile(file: File): boolean {
 }
 
 /**
+ * Get file extension from filename (handles filenames with multiple dots)
+ * @example
+ * getFileExtension("report.final.pdf") // returns "pdf"
+ * getFileExtension("my.file.name.docx") // returns "docx"
+ */
+export function getFileExtension(fileName: string): string {
+  if (!fileName || typeof fileName !== "string") return "";
+  const lastDotIndex = fileName.lastIndexOf(".");
+  if (lastDotIndex === -1) return "";
+  return fileName.substring(lastDotIndex + 1).toLowerCase();
+}
+
+/**
+ * Check if a filename is an image based on extension
+ */
+export function isImageFileByName(fileName: string): boolean {
+  const ext = getFileExtension(fileName);
+  return ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"].includes(ext);
+}
+
+/**
+ * Get file icon emoji based on file extension
+ */
+export function getFileIcon(fileName: string): string {
+  const ext = getFileExtension(fileName);
+
+  switch (ext) {
+    case "pdf":
+      return "📄";
+    case "doc":
+    case "docx":
+      return "📝";
+    case "xls":
+    case "xlsx":
+      return "📊";
+    case "ppt":
+    case "pptx":
+      return "📊";
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "gif":
+    case "webp":
+    case "svg":
+    case "bmp":
+      return "🖼️";
+    case "zip":
+    case "rar":
+    case "7z":
+      return "📦";
+    case "txt":
+      return "📃";
+    case "csv":
+      return "📋";
+    case "mp4":
+    case "avi":
+    case "mov":
+      return "🎥";
+    case "mp3":
+    case "wav":
+      return "🎵";
+    case "html":
+    case "css":
+    case "js":
+    case "ts":
+    case "jsx":
+    case "tsx":
+      return "💻";
+    default:
+      return "📎";
+  }
+}
+
+/**
+ * Sanitize filename for safe storage (removes special characters)
+ */
+export function sanitizeFileName(fileName: string): string {
+  if (!fileName || typeof fileName !== "string") return "";
+
+  // Get the extension first
+  const ext = getFileExtension(fileName);
+  const nameWithoutExt = fileName.substring(0, fileName.lastIndexOf("."));
+
+  // Replace special characters with underscores, keep dots, hyphens, and alphanumeric
+  const sanitizedName = nameWithoutExt.replace(/[^a-zA-Z0-9.-]/g, "_");
+
+  return ext ? `${sanitizedName}.${ext}` : sanitizedName;
+}
+
+/**
  * Validate file size against maximum allowed size
  */
 export function isValidFileSize(file: File, maxSizeMB: number): boolean {

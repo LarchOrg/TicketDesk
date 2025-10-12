@@ -45,7 +45,7 @@ function parseFormData(formData: FormData): CreateTicketData {
 // Meta function
 export const meta = () => {
   return [
-    { title: "Create New Ticket - TicketDesk" },
+    { title: "Create New Ticket - HelpDesk" },
     { name: "description", content: "Submit a new support ticket" },
   ];
 };
@@ -123,7 +123,10 @@ export async function action({ request }: Route.ActionArgs) {
     const attachments: File[] = [];
     for (const [key, value] of formData.entries()) {
       if (key.startsWith("attachment_") && value instanceof File) {
-        attachments.push(value);
+        // Only add files that have content (size > 0)
+        if (value.size > 0) {
+          attachments.push(value);
+        }
       }
     }
 
@@ -131,7 +134,7 @@ export async function action({ request }: Route.ActionArgs) {
     const result = await services.tickets.createTicket(ticketData);
     console.log(result);
 
-    if (!result.success || !result.ticket) {
+    if (!result.success || !result.ticket || !result.ticketId) {
       return Response.json(
         {
           success: false,
@@ -143,15 +146,72 @@ export async function action({ request }: Route.ActionArgs) {
 
     console.log("✅ Ticket created successfully:", result.ticket.id);
 
-    // Upload attachments if any (optional - implement if needed)
+    // Upload attachments if any
     if (attachments.length > 0) {
-      console.log(`📎 ${attachments.length} attachments to upload`);
-      // TODO: Implement file upload to storage
-      // For now, we'll skip file uploads to avoid errors
+      console.log(`📎 Uploading ${attachments.length} attachments...`);
+      console.log(
+        `📋 Attachment details:`,
+        attachments.map((f) => ({ name: f.name, size: f.size, type: f.type }))
+      );
+
+      const uploadResults = await Promise.allSettled(
+        attachments.map((file) =>
+          services.attachments.uploadAttachment(result.ticketId!, file, user.id)
+        )
+      );
+
+      // Log detailed upload results
+      uploadResults.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          if (result.value.success) {
+            console.log(
+              `✅ Attachment ${index + 1} uploaded:`,
+              attachments[index].name
+            );
+          } else {
+            console.error(
+              `❌ Attachment ${index + 1} failed:`,
+              attachments[index].name,
+              result.value.error
+            );
+          }
+        } else {
+          console.error(
+            `❌ Attachment ${index + 1} rejected:`,
+            attachments[index].name,
+            result.reason
+          );
+        }
+      });
+
+      const successfulUploads = uploadResults.filter(
+        (r) =>
+          r.status === "fulfilled" &&
+          (r as PromiseFulfilledResult<any>).value?.success
+      ).length;
+      const failedUploads = uploadResults.length - successfulUploads;
+
+      console.log(`✅ ${successfulUploads} attachments uploaded successfully`);
+      if (failedUploads > 0) {
+        console.warn(`⚠️ ${failedUploads} attachments failed to upload`);
+        // Log the specific errors
+        uploadResults.forEach((result, index) => {
+          if (result.status === "fulfilled" && !result.value.success) {
+            console.error(
+              `   - ${attachments[index].name}: ${result.value.error}`
+            );
+          }
+        });
+      }
+
+      // Note: We don't fail the ticket creation if attachments fail
+      // The ticket is already created, attachments are optional
+    } else {
+      console.log("ℹ️ No attachments to upload");
     }
 
-    // Redirect to the ticket details page
-    throw redirect(`/tickets/${result.ticket.id}`, {
+    // Redirect to the newly created ticket
+    return redirect(`/tickets/${result.ticket.id}`, {
       headers: response.headers,
     });
   } catch (error) {

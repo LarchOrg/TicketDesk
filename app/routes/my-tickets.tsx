@@ -225,7 +225,8 @@ function TicketsList({ tickets }: { tickets: TicketType[] }) {
                   </span>
                 </div>
                 <p className="text-muted-foreground mb-3 line-clamp-2">
-                  {ticket.description}
+                  {ticket.description?.replace(/<[^>]*>/g, "") ||
+                    "No description"}
                 </p>
                 <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                   <span>#{ticket.id}</span>

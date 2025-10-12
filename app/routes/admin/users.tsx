@@ -10,28 +10,30 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { redirect, useNavigate, useRevalidator, useSubmit } from "react-router";
-import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
+// Remove the type import since it's causing issues
+// import type { Route } from "../+types/admin/users";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "../components/ui/card";
+} from "../../components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../components/ui/dropdown-menu";
-import { Input } from "../components/ui/input";
+} from "../../components/ui/dropdown-menu";
+import { Input } from "../../components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../components/ui/select";
+} from "../../components/ui/select";
 import {
   Table,
   TableBody,
@@ -39,12 +41,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../components/ui/table";
-import { getRoleColor, getRoleDisplayName } from "../lib/role-utils";
-import { createSupabaseServerClient } from "../lib/supabase-server";
-import type { Profile } from "../lib/types";
-import { createServices } from "../services";
-import type { Route } from "./+types/admin.users";
+} from "../../components/ui/table";
+import { getRoleColor, getRoleDisplayName } from "../../lib/role-utils";
+import { createSupabaseServerClient } from "../../lib/supabase-server";
+import type { Profile } from "../../lib/types";
+import { createServices } from "../../services";
 
 interface AdminUsersLoaderData {
   users: Profile[];
@@ -277,10 +278,11 @@ export default function AdminUsers({
     // Only re-run when the success flag changes
   }, [actionData?.success, revalidator]);
 
-  const filteredUsers = users.filter((user) => {
+  const filteredUsers = users.filter((user: Profile) => {
+    const q = searchTerm.toLowerCase();
     const matchesSearch =
-      user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email?.toLowerCase().includes(searchTerm.toLowerCase());
+      user.name?.toLowerCase().includes(q) ||
+      user.email?.toLowerCase().includes(q);
     const matchesRole = roleFilter === "all" || user.role === roleFilter;
     return matchesSearch && matchesRole;
   });

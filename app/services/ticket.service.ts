@@ -168,6 +168,10 @@ export function createTicketService(supabase: SupabaseClient) {
 
     /**
      * Create a new ticket
+     *
+     * Accepts an optional attachments array on ticketData. Attachments are not
+     * uploaded here; this method will return the created ticket ID so callers
+     * can upload attachments and associate them with the ticket.
      */
     async createTicket(ticketData: {
       title: string;
@@ -175,7 +179,13 @@ export function createTicketService(supabase: SupabaseClient) {
       priority: TicketPriority;
       created_by: string;
       assigned_to?: string;
-    }): Promise<{ success: boolean; ticket?: Ticket; error?: string }> {
+      attachments?: { name: string; size: number; type?: string }[];
+    }): Promise<{
+      success: boolean;
+      ticket?: Ticket;
+      ticketId?: string;
+      error?: string;
+    }> {
       const { data, error } = await supabase
         .from("tickets")
         .insert({
@@ -205,7 +215,9 @@ export function createTicketService(supabase: SupabaseClient) {
         return { success: false, error: "Failed to transform ticket data" };
       }
 
-      return { success: true, ticket };
+      // Return the ticket and its ID so callers can upload attachments and
+      // associate them with this ticket.
+      return { success: true, ticket, ticketId: ticket.id };
     },
 
     /**
@@ -217,6 +229,7 @@ export function createTicketService(supabase: SupabaseClient) {
         title?: string;
         description?: string;
         priority?: TicketPriority;
+        status?: TicketStatus;
         assigned_to?: string | null;
       }
     ): Promise<{ success: boolean; ticket?: Ticket; error?: string }> {
@@ -286,22 +299,133 @@ export function createTicketService(supabase: SupabaseClient) {
     },
 
     /**
-     * Delete a ticket
+     * Delete a ticket and all related data
      */
     async deleteTicket(
-      ticketId: string
+      ticketId: string,
+      userId?: string,
+      userRole?: string
     ): Promise<{ success: boolean; error?: string }> {
-      const { error } = await supabase
-        .from("tickets")
-        .delete()
-        .eq("id", ticketId);
+      try {
+        console.log("Starting ticket deletion process for ID:", ticketId);
+        if (userId && userRole) {
+          console.log("User context:", { userId, userRole });
+        }
 
-      if (error) {
-        console.error("Error deleting ticket:", error);
-        return { success: false, error: error.message };
+        // First, verify the ticket exists and get its details
+        const { data: existingTicket, error: fetchError } = await supabase
+          .from("tickets")
+          .select("id, title, created_by")
+          .eq("id", ticketId)
+          .single();
+
+        if (fetchError) {
+          console.error("Error fetching ticket:", fetchError);
+          return {
+            success: false,
+            error: `Ticket not found: ${fetchError.message}`,
+          };
+        }
+
+        if (!existingTicket) {
+          console.error("Ticket does not exist:", ticketId);
+          return {
+            success: false,
+            error: "Ticket not found in database",
+          };
+        }
+
+        console.log("Found ticket to delete:", existingTicket);
+
+        // Start a transaction to delete all related data
+        // First, delete comments
+        const { error: commentsError } = await supabase
+          .from("comments")
+          .delete()
+          .eq("ticket_id", ticketId);
+
+        if (commentsError) {
+          console.error("Error deleting comments:", commentsError);
+          return {
+            success: false,
+            error: `Failed to delete comments: ${commentsError.message}`,
+          };
+        }
+
+        // Delete attachments
+        const { error: attachmentsError } = await supabase
+          .from("attachments")
+          .delete()
+          .eq("ticket_id", ticketId);
+
+        if (attachmentsError) {
+          console.error("Error deleting attachments:", attachmentsError);
+          return {
+            success: false,
+            error: `Failed to delete attachments: ${attachmentsError.message}`,
+          };
+        }
+
+        // Delete notifications related to this ticket
+        const { error: notificationsError } = await supabase
+          .from("notifications")
+          .delete()
+          .eq("ticket_id", ticketId);
+
+        if (notificationsError) {
+          console.error("Error deleting notifications:", notificationsError);
+          // Don't fail the deletion if notifications can't be deleted
+          console.warn(
+            "Continuing with ticket deletion despite notification deletion failure"
+          );
+        }
+
+        // Finally, delete the ticket itself
+        const {
+          data: deletedData,
+          error: ticketError,
+          count,
+        } = await supabase.from("tickets").delete().eq("id", ticketId).select(); // This will return the deleted rows
+
+        console.log("Delete operation result:", {
+          deletedData,
+          ticketError,
+          count,
+          ticketId,
+        });
+
+        if (ticketError) {
+          console.error("Error deleting ticket:", ticketError);
+          return {
+            success: false,
+            error: `Failed to delete ticket: ${ticketError.message}`,
+          };
+        }
+
+        // Check if any rows were actually deleted
+        if (!deletedData || deletedData.length === 0) {
+          console.error(
+            "No rows were deleted. This could be due to RLS policies or the ticket not existing."
+          );
+          return {
+            success: false,
+            error:
+              "Ticket could not be deleted. This might be due to database permissions or the ticket not existing.",
+          };
+        }
+
+        console.log(`Successfully deleted ${deletedData.length} ticket(s)`);
+        return { success: true };
+      } catch (error) {
+        console.error("Unexpected error during ticket deletion:", error);
+        return {
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unexpected error occurred",
+        };
       }
-
-      return { success: true };
     },
 
     /**

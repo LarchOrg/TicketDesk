@@ -132,12 +132,14 @@ export interface Category {
 export interface Attachment {
   id: string;
   ticket_id: string;
-  filename: string;
-  file_path: string;
+  comment_id?: string | null; // Optional - for comment attachments
+  file_name: string; // Changed from filename to match database
+  file_type: string; // Changed from content_type to match database
   file_size: number;
-  mime_type: string;
+  storage_path: string; // Changed from file_path to match database
   uploaded_by: string;
   created_at: string;
+  url?: string; // Optional signed URL for display/download
 }
 
 export interface Comment {
@@ -183,6 +185,8 @@ export interface TicketFilters {
   category?: string;
   assigned_to?: string;
   created_by?: string;
+  date_from?: string;
+  date_to?: string;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   limit?: number;

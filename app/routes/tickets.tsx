@@ -1,14 +1,23 @@
 import { Grid, List, Plus } from "lucide-react";
-import { useState } from "react";
-import { redirect, useNavigate, useNavigation } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import {
+  redirect,
+  useActionData,
+  useNavigate,
+  useNavigation,
+  useSubmit,
+} from "react-router";
 import {
   DashboardSkeleton,
   TicketListSkeleton,
 } from "~/components/LoadingComponents";
 import TicketCard from "~/components/TicketCard";
 import TicketTable from "~/components/TicketTable";
+import { ToastContainer, useToast } from "~/components/Toast";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent } from "~/components/ui/card";
+import { useAuth } from "~/contexts/AuthContext";
+import { ROLE_PERMISSIONS } from "~/lib/role-utils";
 import { createSupabaseServerClient } from "~/lib/supabase-server";
 import type { Ticket, TicketFilters, TicketStats } from "~/lib/types";
 import { createServices } from "~/services";
@@ -27,7 +36,14 @@ interface TicketsLoaderData {
   error?: string;
 }
 
+interface TicketsActionData {
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
 type ViewMode = "grid" | "list";
+type ActionType = "deleteTicket";
 
 // Constants
 const DEFAULT_FILTERS: TicketFilters = {
@@ -157,6 +173,143 @@ export async function loader({
         search: filters.search || "",
       },
       error: "Failed to fetch tickets",
+    };
+  }
+}
+
+// Action function
+export async function action({
+  request,
+}: Route.ActionArgs): Promise<TicketsActionData> {
+  const { supabase } = createSupabaseServerClient(request);
+  const services = createServices(supabase);
+
+  // Check authentication
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    throw new Response("Authentication required", { status: 401 });
+  }
+
+  const formData = await request.formData();
+  const actionType = formData.get("actionType") as ActionType;
+  console.log(actionType, "Action type received");
+
+  try {
+    switch (actionType) {
+      case "deleteTicket": {
+        const ticketId = formData.get("ticketId") as string;
+        console.log("Delete ticket action called with ID:", ticketId);
+
+        if (!ticketId) {
+          console.log("No ticket ID provided");
+          return {
+            success: false,
+            message: "Ticket ID is required",
+            error: "Missing ticket ID",
+          };
+        }
+
+        // Check if user has permission to delete tickets
+        // Get user profile to check role
+        console.log("Checking user permissions for user:", user.id);
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+
+        if (profileError) {
+          console.error("Error fetching user profile:", profileError);
+          return {
+            success: false,
+            message: "Failed to verify user permissions",
+            error: profileError.message,
+          };
+        }
+
+        console.log("User profile:", profile);
+        const userRole = profile?.role as
+          | "admin"
+          | "agent"
+          | "user"
+          | undefined;
+        const permissions = userRole
+          ? ROLE_PERMISSIONS[userRole]
+          : ROLE_PERMISSIONS.user;
+
+        console.log(
+          "User role:",
+          userRole,
+          "Can delete:",
+          permissions.canDeleteTickets
+        );
+
+        if (!permissions.canDeleteTickets) {
+          console.log("Permission denied for user role:", userRole);
+          return {
+            success: false,
+            message: "Permission denied",
+            error: "You don't have permission to delete tickets",
+          };
+        }
+
+        console.log("Attempting to delete ticket:", ticketId);
+
+        // First, let's check if the ticket exists
+        const { data: existingTicket, error: fetchError } = await supabase
+          .from("tickets")
+          .select("id, title")
+          .eq("id", ticketId)
+          .single();
+
+        if (fetchError) {
+          console.error("Error fetching ticket to delete:", fetchError);
+          return {
+            success: false,
+            message: "Ticket not found",
+            error: fetchError.message,
+          };
+        }
+
+        console.log("Found ticket to delete:", existingTicket);
+
+        // Pass user context to the delete service
+        const result = await services.tickets.deleteTicket(
+          ticketId,
+          user.id,
+          userRole || "user"
+        );
+        console.log("Delete result:", result);
+
+        if (!result || !result.success) {
+          console.error("Delete failed:", result);
+          return {
+            success: false,
+            message: "Failed to delete ticket",
+            error: result?.error || "Unknown error occurred",
+          };
+        }
+
+        console.log("Ticket deleted successfully");
+        return { success: true, message: "Ticket deleted successfully" };
+      }
+
+      default:
+        return {
+          success: false,
+          message: "Invalid action type",
+          error: "Unknown action",
+        };
+    }
+  } catch (error) {
+    console.error("Tickets action error:", error);
+    return {
+      success: false,
+      message: "Failed to perform action",
+      error: error instanceof Error ? error.message : "Unknown error",
     };
   }
 }
@@ -294,9 +447,13 @@ function EmptyState({ onCreateTicket }: { onCreateTicket: () => void }) {
 function TicketsGrid({
   tickets,
   onTicketClick,
+  onDeleteTicket,
+  canDelete,
 }: {
   tickets: Ticket[];
   onTicketClick: (ticket: Ticket) => void;
+  onDeleteTicket?: (ticketId: string) => Promise<void>;
+  canDelete?: boolean;
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -305,6 +462,8 @@ function TicketsGrid({
           key={ticket.id}
           ticket={ticket}
           onClick={() => onTicketClick(ticket)}
+          onDelete={onDeleteTicket}
+          canDelete={canDelete}
         />
       ))}
     </div>
@@ -335,6 +494,7 @@ function ErrorDisplay({ error }: { error: string }) {
 // Custom hook for ticket management
 function useTicketManagement() {
   const navigate = useNavigate();
+  const submit = useSubmit();
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
   const handleCreateTicket = () => {
@@ -349,12 +509,12 @@ function useTicketManagement() {
     navigate(`/tickets/${ticket.id}`);
   };
 
-  const handleDeleteTicket = async (ticket: Ticket) => {
-    if (confirm(`Are you sure you want to delete ticket "${ticket.title}"?`)) {
-      console.log("Delete ticket:", ticket.id);
-      // TODO: Implement actual delete functionality
-      // This would typically involve calling a delete action or service
-    }
+  const handleDeleteTicket = async (ticketId: string): Promise<void> => {
+    const formData = new FormData();
+    formData.append("actionType", "deleteTicket");
+    formData.append("ticketId", ticketId);
+
+    submit(formData, { method: "POST" });
   };
 
   return {
@@ -370,12 +530,20 @@ function useTicketManagement() {
 // Main component
 export default function TicketsPage({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
+  const actionData = useActionData() as TicketsActionData | undefined;
+  const { user, profile } = useAuth();
+  const { toasts, removeToast, success, error } = useToast();
+  const lastActionDataRef = useRef<TicketsActionData | undefined>(undefined);
 
   if (!loaderData) {
     return <DashboardSkeleton />;
   }
 
-  const { tickets, stats, error } = loaderData as TicketsLoaderData;
+  const {
+    tickets,
+    stats,
+    error: loaderError,
+  } = loaderData as TicketsLoaderData;
 
   const {
     viewMode,
@@ -386,12 +554,49 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
     handleDeleteTicket,
   } = useTicketManagement();
 
+  // Check user permissions - get role from profile instead of user metadata
+  const userRole = profile?.role as "admin" | "agent" | "user" | undefined;
+  const permissions = userRole
+    ? ROLE_PERMISSIONS[userRole]
+    : ROLE_PERMISSIONS.user;
+  const canDelete = permissions.canDeleteTickets;
+
+  // Handle action feedback - prevent duplicate toasts
+  useEffect(() => {
+    if (actionData && actionData !== lastActionDataRef.current) {
+      lastActionDataRef.current = actionData;
+      if (actionData.success) {
+        success("Success", actionData.message);
+      } else {
+        error("Error", actionData.message);
+      }
+    }
+  }, [actionData, success, error]);
+
   // Show loading state during navigation
   const isLoading = navigation.state === "loading";
 
   // Handle error state
-  if (error) {
+  if (loaderError) {
     return (
+      <>
+        <div className="min-h-screen bg-background">
+          <div className="max-w-full mx-auto p-6">
+            <PageHeader
+              onCreateTicket={handleCreateTicket}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+            />
+            <ErrorDisplay error={loaderError} />
+          </div>
+        </div>
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
+      </>
+    );
+  }
+
+  return (
+    <>
       <div className="min-h-screen bg-background">
         <div className="max-w-full mx-auto p-6">
           <PageHeader
@@ -399,39 +604,32 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
             viewMode={viewMode}
             onViewModeChange={setViewMode}
           />
-          <ErrorDisplay error={error} />
+
+          <StatsGrid stats={stats} />
+
+          {/* Tickets Display */}
+          {isLoading ? (
+            <TicketListSkeleton />
+          ) : tickets.length === 0 ? (
+            <EmptyState onCreateTicket={handleCreateTicket} />
+          ) : viewMode === "grid" ? (
+            <TicketsGrid
+              tickets={tickets}
+              onTicketClick={handleTicketClick}
+              onDeleteTicket={handleDeleteTicket}
+              canDelete={canDelete}
+            />
+          ) : (
+            <TicketTable
+              tickets={tickets}
+              onTicketClick={handleTicketClick}
+              onEdit={handleEditTicket}
+              onDelete={(ticket: Ticket) => handleDeleteTicket(ticket.id)}
+            />
+          )}
         </div>
       </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-full mx-auto p-6">
-        <PageHeader
-          onCreateTicket={handleCreateTicket}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-        />
-
-        <StatsGrid stats={stats} />
-
-        {/* Tickets Display */}
-        {isLoading ? (
-          <TicketListSkeleton />
-        ) : tickets.length === 0 ? (
-          <EmptyState onCreateTicket={handleCreateTicket} />
-        ) : viewMode === "grid" ? (
-          <TicketsGrid tickets={tickets} onTicketClick={handleTicketClick} />
-        ) : (
-          <TicketTable
-            tickets={tickets}
-            onTicketClick={handleTicketClick}
-            onEdit={handleEditTicket}
-            onDelete={handleDeleteTicket}
-          />
-        )}
-      </div>
-    </div>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+    </>
   );
 }

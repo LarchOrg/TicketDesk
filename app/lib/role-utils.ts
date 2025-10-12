@@ -1,8 +1,49 @@
-import { useAuth } from "../contexts/AuthContext";
-import type { StatusTransition, TicketStatus } from "./types";
-import { STATUS_TRANSITIONS } from "./types";
+import type { User } from "@supabase/supabase-js";
+import {
+  STATUS_TRANSITIONS,
+  type Profile,
+  type StatusTransition,
+  type Ticket,
+  type TicketStatus,
+} from "./types";
 
 export type UserRole = "admin" | "agent" | "user";
+
+/**
+ * Determine whether a given authenticated user can edit a ticket.
+ * - Admins and agents can edit any ticket.
+ * - Regular users can only edit tickets they created.
+ */
+/**
+ * Check if a user can edit a ticket based on their role and ownership
+ */
+export function canEditTicket(
+  ticket: Ticket,
+  user: User | null,
+  profile: Profile | null
+): boolean {
+  if (!user || !profile) return false;
+
+  const userRole = profile.role as UserRole | undefined;
+  const role: UserRole = userRole ?? "user";
+
+  if (role === "admin" || role === "agent") return true;
+
+  return ticket.created_by === user.id;
+}
+
+/**
+ * Determine whether a user (by role and id) can edit a ticket.
+ * This is a pure helper when you already have role and userId separately.
+ */
+export function canUserEditTicket(
+  userRole: UserRole,
+  userId: string,
+  ticket: Ticket
+): boolean {
+  if (userRole === "admin" || userRole === "agent") return true;
+  return ticket.created_by === userId;
+}
 
 export interface RolePermissions {
   canManageUsers: boolean;
@@ -13,49 +54,45 @@ export interface RolePermissions {
   canManageSettings: boolean;
   canViewAnalytics: boolean;
   canCloseTickets: boolean;
+  canEditAnyTicket: boolean;
 }
 
-export function useRolePermissions(): RolePermissions {
-  const { profile } = useAuth();
-  const role = profile?.role as UserRole;
-
-  switch (role) {
-    case "admin":
-      return {
-        canManageUsers: true,
-        canManageAllTickets: true,
-        canAssignTickets: true,
-        canViewAllTickets: true,
-        canDeleteTickets: true,
-        canManageSettings: true,
-        canViewAnalytics: true,
-        canCloseTickets: true,
-      };
-    case "agent":
-      return {
-        canManageUsers: false,
-        canManageAllTickets: true,
-        canAssignTickets: true,
-        canViewAllTickets: true,
-        canDeleteTickets: false,
-        canManageSettings: false,
-        canViewAnalytics: true,
-        canCloseTickets: false, // Agents cannot close tickets directly
-      };
-    case "user":
-    default:
-      return {
-        canManageUsers: false,
-        canManageAllTickets: false,
-        canAssignTickets: false,
-        canViewAllTickets: false,
-        canDeleteTickets: false,
-        canManageSettings: false,
-        canViewAnalytics: false,
-        canCloseTickets: true, // Users can close their own tickets
-      };
-  }
-}
+// Define role-based permissions
+export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
+  admin: {
+    canManageUsers: true,
+    canManageAllTickets: true,
+    canAssignTickets: true,
+    canViewAllTickets: true,
+    canDeleteTickets: true,
+    canManageSettings: true,
+    canViewAnalytics: true,
+    canCloseTickets: true,
+    canEditAnyTicket: true,
+  },
+  agent: {
+    canManageUsers: false,
+    canManageAllTickets: true,
+    canAssignTickets: true,
+    canViewAllTickets: true,
+    canDeleteTickets: true, // Temporarily allow agents to delete tickets for testing
+    canManageSettings: false,
+    canViewAnalytics: true,
+    canCloseTickets: false,
+    canEditAnyTicket: true,
+  },
+  user: {
+    canManageUsers: false,
+    canManageAllTickets: false,
+    canAssignTickets: false,
+    canViewAllTickets: false,
+    canDeleteTickets: false,
+    canManageSettings: false,
+    canViewAnalytics: false,
+    canCloseTickets: true,
+    canEditAnyTicket: false,
+  },
+};
 
 export function getRoleDisplayName(role: UserRole): string {
   switch (role) {
@@ -88,25 +125,12 @@ export function canUserAccessTicket(
   userId: string,
   ticket: { created_by: string; assigned_to?: string | null }
 ): boolean {
-  if (userRole === "admin" || userRole === "agent") {
+  // Check permissions based on role permissions map first
+  const perms = ROLE_PERMISSIONS[userRole];
+  if (perms?.canViewAllTickets) {
     return true;
   }
   return ticket.created_by === userId || ticket.assigned_to === userId;
-}
-
-export function canUserEditTicket(
-  userRole: UserRole,
-  userId: string,
-  ticket: { created_by: string; assigned_to?: string | null; status: string }
-): boolean {
-  if (userRole === "admin") {
-    return true;
-  }
-  if (userRole === "agent") {
-    return true;
-  }
-  // Users can only edit their own tickets and only if not closed
-  return ticket.created_by === userId && ticket.status !== "closed";
 }
 
 // New functions for status transition logic
@@ -134,8 +158,10 @@ export function getValidStatusTransitions(
       if (ticket.created_by !== userId) {
         return false;
       }
-      // Users can only transition from resolved status (accept/reject resolution)
-      if (currentStatus !== "resolved") {
+      // Users can transition from:
+      // 1. "open" status (to close as trivial)
+      // 2. "resolved" status (to accept/reject resolution)
+      if (currentStatus !== "open" && currentStatus !== "resolved") {
         return false;
       }
     }

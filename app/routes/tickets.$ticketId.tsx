@@ -1,25 +1,38 @@
 import {
+  AlertCircle,
   ArrowLeftIcon,
-  CalendarIcon,
-  ClockIcon,
+  ArrowRightIcon,
+  Calendar,
+  CheckCircle2Icon,
+  CheckIcon,
+  DownloadIcon,
   EditIcon,
-  EyeOffIcon,
   MessageCircleIcon,
   PaperclipIcon,
+  PlayCircleIcon,
+  PlusIcon,
+  RotateCcwIcon,
   SaveIcon,
+  TrashIcon,
   UserIcon,
+  XCircleIcon,
   XIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { redirect, useNavigate, useNavigation, useSubmit } from "react-router";
-import { RouteSkeleton } from "~/components/LoadingComponents";
+import {
+  useActionData,
+  useLoaderData,
+  useNavigate,
+  useNavigation,
+  useSubmit,
+} from "react-router";
 import PriorityBadge from "~/components/PriorityBadge";
-import { StatusBadge, StatusTransition } from "~/components/StatusTransition";
-import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
+import { Avatar, AvatarFallback } from "~/components/ui/avatar";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -29,7 +42,11 @@ import {
 } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
 import { useAuth } from "~/contexts/AuthContext";
-import { canTransitionStatus, useRolePermissions } from "~/lib/role-utils";
+import {
+  canUserEditTicket,
+  getValidStatusTransitions,
+  ROLE_PERMISSIONS,
+} from "~/lib/role-utils";
 import { createSupabaseServerClient } from "~/lib/supabase-server";
 import type {
   Attachment,
@@ -39,6 +56,13 @@ import type {
   TicketPriority,
   TicketStatus,
 } from "~/lib/types";
+import {
+  formatDate,
+  formatFileSize,
+  getFileIcon,
+  isImageFileByName,
+  sanitizeHtml,
+} from "~/lib/utils";
 import { createServices } from "~/services";
 import type { Route } from "./+types/tickets.$ticketId";
 
@@ -54,6 +78,7 @@ interface TicketDetailsLoaderData {
 interface TicketDetailsActionData {
   success: boolean;
   message: string;
+  error?: string;
 }
 
 interface EditTicketData {
@@ -61,344 +86,626 @@ interface EditTicketData {
   description: string;
   priority: TicketPriority;
   assigned_to: string | undefined;
+  attachments?: File[];
 }
 
-type CommentType = "comment" | "internal_note";
-type ActionType = "updateTicket" | "transitionStatus" | "addComment";
+type CommentType = "comment" | "internal";
+type ActionType =
+  | "updateTicket"
+  | "updateStatus"
+  | "addComment"
+  | "deleteAttachment";
 
 // Constants
 const PRIORITY_OPTIONS = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "critical", label: "Critical" },
+  { value: "low", label: "Low", color: "bg-blue-500" },
+  { value: "medium", label: "Medium", color: "bg-yellow-500" },
+  { value: "high", label: "High", color: "bg-orange-500" },
+  { value: "critical", label: "Critical", color: "bg-red-500" },
 ] as const;
 
-// Utility functions
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleString();
-}
-
-function formatFileSize(bytes: number): string {
-  return `${Math.round(bytes / 1024)}KB`;
-}
-
-function validateTicketUpdate(data: Partial<EditTicketData>): string | null {
-  if (!data.title?.trim()) {
-    return "Title is required";
-  }
-  if (!data.description?.trim()) {
-    return "Description is required";
-  }
-  if (data.title.trim().length < 3) {
-    return "Title must be at least 3 characters";
-  }
-  if (data.description.trim().length < 10) {
-    return "Description must be at least 10 characters";
-  }
-  return null;
-}
-
-function validateComment(content: string): string | null {
-  if (!content?.trim()) {
-    return "Comment content is required";
-  }
-  if (content.trim().length < 1) {
-    return "Comment cannot be empty";
-  }
-  return null;
-}
-
-// Meta function
-export const meta = ({ data }: { data?: TicketDetailsLoaderData }) => {
-  const ticketId = data?.ticket?.id ? `#${data.ticket.id.slice(-8)}` : "";
-  return [
-    { title: `Ticket ${ticketId} - TicketDesk` },
-    { name: "description", content: "View and manage ticket details" },
-  ];
-};
+const STATUS_OPTIONS = [
+  { value: "open", label: "Open", color: "bg-blue-500", icon: XCircleIcon },
+  {
+    value: "in_progress",
+    label: "In Progress",
+    color: "bg-yellow-500",
+    icon: PlayCircleIcon,
+  },
+  {
+    value: "resolved",
+    label: "Resolved",
+    color: "bg-green-500",
+    icon: CheckCircle2Icon,
+  },
+  {
+    value: "reopened",
+    label: "Reopened",
+    color: "bg-orange-500",
+    icon: RotateCcwIcon,
+  },
+  { value: "closed", label: "Closed", color: "bg-gray-500", icon: XCircleIcon },
+] as const;
 
 // Loader function
 export async function loader({
-  request,
   params,
+  request,
 }: Route.LoaderArgs): Promise<TicketDetailsLoaderData> {
-  const { supabase, response } = createSupabaseServerClient(request);
+  const { supabase } = createSupabaseServerClient(request);
+  const services = createServices(supabase);
+  const ticketId = params.ticketId;
+
+  if (!ticketId) {
+    throw new Response("Ticket ID is required", { status: 400 });
+  }
 
   try {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      throw redirect("/login", { headers: response.headers });
-    }
-
-    if (!params.ticketId) {
-      return {
-        error: "Ticket ID is required",
-        ticket: {} as Ticket,
-        comments: [],
-        attachments: [],
-        assignableUsers: [],
-      };
-    }
-
-    const services = createServices(supabase);
-
     const [ticket, comments, attachments, assignableUsers] = await Promise.all([
-      services.tickets.getTicketById(params.ticketId),
-      services.comments.getCommentsByTicketId(params.ticketId),
-      services.attachments.getAttachmentsByTicketId(params.ticketId),
+      services.tickets.getTicketById(ticketId),
+      services.comments.getCommentsByTicketId(ticketId),
+      services.attachments.getAttachmentsByTicketId(ticketId),
       services.users.getAssignableUsers(),
     ]);
 
     if (!ticket) {
-      return {
-        error: "Ticket not found",
-        ticket: {} as Ticket,
-        comments: [],
-        attachments: [],
-        assignableUsers: [],
-      };
+      throw new Response("Ticket not found", { status: 404 });
     }
+
+    // Add URLs to attachments
+    const attachmentsWithUrls = await Promise.all(
+      attachments.map(async (attachment) => {
+        try {
+          const urlResult = await services.attachments.getAttachmentUrl(
+            attachment.storage_path
+          );
+          return {
+            ...attachment,
+            url:
+              typeof urlResult === "string" ? urlResult : urlResult?.url || "",
+          };
+        } catch (error) {
+          return {
+            ...attachment,
+            url: "",
+          };
+        }
+      })
+    );
 
     return {
       ticket,
       comments,
-      attachments,
+      attachments: attachmentsWithUrls,
       assignableUsers,
     };
-  } catch (error: any) {
-    console.error("Ticket details loader error:", error);
-
-    // If it's a redirect, re-throw it
-    if (error instanceof Response) {
-      throw error;
-    }
-
+  } catch (error) {
+    console.error("Error loading ticket details:", error);
     return {
-      error: "Failed to load ticket details",
       ticket: {} as Ticket,
       comments: [],
       attachments: [],
       assignableUsers: [],
+      error: "Failed to load ticket details",
     };
   }
 }
 
-// Action function
 export async function action({
-  request,
   params,
+  request,
 }: Route.ActionArgs): Promise<TicketDetailsActionData> {
   const { supabase } = createSupabaseServerClient(request);
+  const services = createServices(supabase);
+  const ticketId = params.ticketId;
+
+  if (!ticketId) {
+    throw new Response("Ticket ID is required", { status: 400 });
+  }
+
   const formData = await request.formData();
   const actionType = formData.get("actionType") as ActionType;
 
   try {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      return { success: false, message: "Authentication required" };
-    }
-
-    if (!params.ticketId) {
-      return { success: false, message: "Ticket ID is required" };
-    }
-
-    const services = createServices(supabase);
-    const profile = await services.users.getUserById(user.id);
-
-    if (!profile) {
-      return { success: false, message: "User profile not found" };
-    }
-
     switch (actionType) {
-      case "updateTicket":
-        return await handleUpdateTicket(services, params.ticketId, formData);
+      case "updateTicket": {
+        const title = formData.get("title") as string;
+        const description = formData.get("description") as string;
+        const priority = formData.get("priority") as TicketPriority;
+        const assigned_to = formData.get("assigned_to") as string | null;
+        const status = formData.get("status") as TicketStatus | null;
 
-      case "transitionStatus":
-        return await handleStatusTransition(
-          services,
-          params.ticketId,
-          formData,
-          profile,
-          user.id
+        await services.tickets.updateTicket(ticketId, {
+          title,
+          description,
+          priority,
+          assigned_to,
+          ...(status ? { status } : {}),
+        });
+
+        return { success: true, message: "Ticket updated successfully" };
+      }
+
+      case "updateStatus": {
+        const status = formData.get("status") as TicketStatus;
+
+        // Get the authenticated user
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+        if (authError || !user) {
+          return {
+            success: false,
+            message: "Authentication required",
+            error: "User not authenticated",
+          };
+        }
+
+        // Get user profile for role and actor name
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("name, role")
+          .eq("id", user.id)
+          .single();
+
+        if (!profile) {
+          return {
+            success: false,
+            message: "User profile not found",
+            error: "Profile does not exist",
+          };
+        }
+
+        // Get ticket details for validation and notifications
+        const ticket = await services.tickets.getTicketById(ticketId);
+        if (!ticket) {
+          return {
+            success: false,
+            message: "Ticket not found",
+            error: "Ticket does not exist",
+          };
+        }
+
+        // Import role-based validation functions
+        const { canTransitionStatus } = await import("~/lib/role-utils");
+
+        // Validate the status transition based on role and workflow
+        const userRole = (profile.role as "admin" | "agent" | "user") || "user";
+        const canTransition = canTransitionStatus(
+          ticket.status,
+          status,
+          userRole,
+          user.id,
+          { created_by: ticket.created_by, assigned_to: ticket.assigned_to }
         );
 
-      case "addComment":
-        return await handleAddComment(
-          services,
-          params.ticketId,
-          formData,
-          user.id
-        );
+        if (!canTransition) {
+          return {
+            success: false,
+            message: "Status transition not allowed",
+            error: `You cannot change status from ${ticket.status} to ${status}`,
+          };
+        }
+
+        // Special handling for agent transitions - auto-assign if not assigned
+        if (
+          userRole === "agent" &&
+          status === "in_progress" &&
+          !ticket.assigned_to
+        ) {
+          await services.tickets.updateTicket(ticketId, {
+            status,
+            assigned_to: user.id,
+          });
+        } else {
+          await services.tickets.updateTicket(ticketId, { status });
+        }
+
+        // Send notifications to relevant users
+        const recipientIds = [ticket.created_by];
+        if (ticket.assigned_to && ticket.assigned_to !== ticket.created_by) {
+          recipientIds.push(ticket.assigned_to);
+        }
+
+        await services.notifications.notifyTicketEvent({
+          ticketId,
+          type: "status_update",
+          actorId: user.id,
+          actorName: profile?.name || "Unknown User",
+          recipientIds,
+          title: "Ticket Status Updated",
+          message: `Ticket status changed to ${status.replace("_", " ")}`,
+        });
+
+        return { success: true, message: "Ticket status updated successfully" };
+      }
+
+      case "addComment": {
+        const content = formData.get("content") as string;
+        const type = formData.get("type") as "comment" | "internal";
+
+        // Get the authenticated user
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+        if (authError || !user) {
+          return {
+            success: false,
+            message: "Authentication required",
+            error: "User not authenticated",
+          };
+        }
+
+        // Get user profile for actor name
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("name")
+          .eq("id", user.id)
+          .single();
+
+        // Get ticket details for notifications
+        const ticket = await services.tickets.getTicketById(ticketId);
+        if (!ticket) {
+          return {
+            success: false,
+            message: "Ticket not found",
+            error: "Ticket does not exist",
+          };
+        }
+
+        await services.comments.createComment({
+          ticket_id: ticketId,
+          user_id: user.id,
+          content,
+          comment_type: type,
+          is_internal: type === "internal",
+        });
+
+        // Send notifications to relevant users (only for public comments)
+        if (type === "comment") {
+          const recipientIds = [ticket.created_by];
+          if (ticket.assigned_to && ticket.assigned_to !== ticket.created_by) {
+            recipientIds.push(ticket.assigned_to);
+          }
+
+          await services.notifications.notifyTicketEvent({
+            ticketId,
+            type: "comment",
+            actorId: user.id,
+            actorName: profile?.name || "Unknown User",
+            recipientIds,
+            title: "New Comment Added",
+            message: `New comment added to your ticket`,
+          });
+        }
+
+        return { success: true, message: "Comment added successfully" };
+      }
+
+      case "deleteAttachment": {
+        const attachmentId = formData.get("attachmentId") as string;
+
+        await services.attachments.deleteAttachment(attachmentId);
+
+        return { success: true, message: "Attachment deleted successfully" };
+      }
 
       default:
-        return { success: false, message: "Invalid action type" };
+        return {
+          success: false,
+          message: "Invalid action type",
+          error: "Unknown action",
+        };
     }
-  } catch (error: any) {
-    console.error("Ticket details action error:", error);
-    return { success: false, message: "An unexpected error occurred" };
+  } catch (error) {
+    console.error("Ticket action error:", error);
+    return {
+      success: false,
+      message: "Failed to perform action",
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
   }
 }
 
-// Action handlers
-async function handleUpdateTicket(
-  services: any,
-  ticketId: string,
-  formData: FormData
-): Promise<TicketDetailsActionData> {
-  const updates = {
-    title: formData.get("title") as string,
-    description: formData.get("description") as string,
-    priority: formData.get("priority") as TicketPriority,
-    assigned_to: (formData.get("assigned_to") as string) || undefined,
+// Component: Status Badge
+function StatusBadge({ status }: { status: TicketStatus }) {
+  const getStatusColor = (status: TicketStatus) => {
+    switch (status) {
+      case "open":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
+      case "in_progress":
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
+      case "resolved":
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
+      case "closed":
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
+      default:
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
+    }
   };
 
-  const validationError = validateTicketUpdate(updates);
-  if (validationError) {
-    return { success: false, message: validationError };
-  }
-
-  const result = await services.tickets.updateTicket(ticketId, updates);
-
-  if (!result.success) {
-    return {
-      success: false,
-      message: result.error || "Failed to update ticket",
-    };
-  }
-
-  return { success: true, message: "Ticket updated successfully" };
-}
-
-async function handleStatusTransition(
-  services: any,
-  ticketId: string,
-  formData: FormData,
-  profile: Profile,
-  userId: string
-): Promise<TicketDetailsActionData> {
-  const newStatus = formData.get("newStatus") as TicketStatus;
-  const transitionLabel = formData.get("transitionLabel") as string;
-
-  const ticket = await services.tickets.getTicketById(ticketId);
-  if (!ticket) {
-    return { success: false, message: "Ticket not found" };
-  }
-
-  const canTransition = canTransitionStatus(
-    ticket.status,
-    newStatus,
-    profile.role as any,
-    userId,
-    {
-      created_by: ticket.created_by,
-      assigned_to: ticket.assigned_to,
-    }
-  );
-
-  if (!canTransition) {
-    return {
-      success: false,
-      message: `You cannot ${transitionLabel.toLowerCase()} this ticket`,
-    };
-  }
-
-  const statusResult = await services.tickets.updateTicketStatus(
-    ticketId,
-    newStatus
-  );
-
-  if (!statusResult.success) {
-    return {
-      success: false,
-      message: statusResult.error || "Failed to update status",
-    };
-  }
-
-  // Add system comment
-  await services.comments.createComment({
-    ticket_id: ticketId,
-    user_id: userId,
-    content: `Ticket status changed to ${newStatus}`,
-    comment_type: "system",
-    is_internal: false,
-  });
-
-  return {
-    success: true,
-    message: `Ticket ${transitionLabel.toLowerCase()} successfully`,
-  };
-}
-
-async function handleAddComment(
-  services: any,
-  ticketId: string,
-  formData: FormData,
-  userId: string
-): Promise<TicketDetailsActionData> {
-  const content = formData.get("content") as string;
-  const isInternal = formData.get("isInternal") === "true";
-
-  const validationError = validateComment(content);
-  if (validationError) {
-    return { success: false, message: validationError };
-  }
-
-  const result = await services.comments.createComment({
-    ticket_id: ticketId,
-    user_id: userId,
-    content: content.trim(),
-    comment_type: "comment",
-    is_internal: isInternal,
-  });
-
-  if (!result.success) {
-    return {
-      success: false,
-      message: result.error || "Failed to add comment",
-    };
-  }
-
-  return { success: true, message: "Comment added successfully" };
-}
-
-// Component: Error Display
-function ErrorDisplay({
-  error,
-  onRetry,
-}: {
-  error: string;
-  onRetry?: () => void;
-}) {
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-destructive">
-            Error Loading Ticket
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-muted-foreground">{error}</p>
-          {onRetry && (
-            <Button onClick={onRetry} className="w-full">
-              Try Again
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    <Badge className={getStatusColor(status)}>
+      {status.replace("_", " ").toUpperCase()}
+    </Badge>
   );
 }
 
+// Component: Status Update Dialog
+function StatusUpdateDialog({
+  currentStatus,
+  onStatusUpdate,
+  isSubmitting,
+  userRole,
+  userId,
+  ticket,
+}: {
+  currentStatus: TicketStatus;
+  onStatusUpdate: (status: TicketStatus) => void;
+  isSubmitting: boolean;
+  userRole: "admin" | "agent" | "user";
+  userId: string;
+  ticket: Ticket;
+}) {
+  const [selectedStatus, setSelectedStatus] =
+    useState<TicketStatus>(currentStatus);
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Get valid transitions for the current user and ticket
+  const validTransitions = getValidStatusTransitions(
+    currentStatus,
+    userRole,
+    userId,
+    { created_by: ticket.created_by, assigned_to: ticket.assigned_to }
+  );
+
+  // If no valid transitions, don't show the button
+  if (validTransitions.length === 0) {
+    return null;
+  }
+
+  const handleSubmit = () => {
+    if (selectedStatus !== currentStatus) {
+      onStatusUpdate(selectedStatus);
+      setIsOpen(false);
+    }
+  };
+
+  const handleClose = () => {
+    setSelectedStatus(currentStatus);
+    setIsOpen(false);
+  };
+
+  const getCurrentStatusInfo = () => {
+    const statusOption = STATUS_OPTIONS.find(
+      (opt) => opt.value === currentStatus
+    );
+    return (
+      statusOption || { label: currentStatus, icon: XCircleIcon, color: "gray" }
+    );
+  };
+
+  const getSelectedStatusInfo = () => {
+    const statusOption = STATUS_OPTIONS.find(
+      (opt) => opt.value === selectedStatus
+    );
+    return (
+      statusOption || {
+        label: selectedStatus,
+        icon: XCircleIcon,
+        color: "gray",
+      }
+    );
+  };
+
+  if (!isOpen) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setIsOpen(true)}
+        className="hover:bg-primary/5 transition-colors"
+      >
+        <EditIcon className="w-4 h-4 mr-2" />
+        Update Status
+      </Button>
+    );
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 transition-opacity"
+        onClick={handleClose}
+      />
+
+      {/* Modal */}
+      <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg mx-4 border border-gray-200 dark:border-gray-700">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <EditIcon className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Update Status
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Change the ticket status to track progress
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClose}
+                className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <XCircleIcon className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-6 space-y-6">
+            {/* Current Status */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Current Status
+              </Label>
+              <div className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                {(() => {
+                  const currentInfo = getCurrentStatusInfo();
+                  const Icon = currentInfo.icon;
+                  return (
+                    <>
+                      <Icon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                      <div>
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {currentInfo.label}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Current ticket status
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Status Options */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Available Status Changes
+              </Label>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {validTransitions.map((transition) => {
+                  const statusOption = STATUS_OPTIONS.find(
+                    (opt) => opt.value === transition.to
+                  );
+                  const Icon = statusOption?.icon || XCircleIcon;
+                  const isSelected = selectedStatus === transition.to;
+
+                  return (
+                    <div
+                      key={transition.to}
+                      onClick={() => setSelectedStatus(transition.to)}
+                      className={`
+                        p-4 rounded-lg border-2 cursor-pointer transition-all duration-200
+                        ${
+                          isSelected
+                            ? "border-primary bg-primary/5 shadow-sm"
+                            : "border-gray-200 dark:border-gray-700 hover:border-primary/50 hover:bg-gray-50 dark:hover:bg-gray-800"
+                        }
+                      `}
+                    >
+                      <div className="flex items-start space-x-3">
+                        <div
+                          className={`
+                          p-2 rounded-lg transition-colors
+                          ${
+                            isSelected
+                              ? "bg-primary text-white"
+                              : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                          }
+                        `}
+                        >
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div
+                            className={`
+                            font-medium transition-colors
+                            ${
+                              isSelected
+                                ? "text-primary"
+                                : "text-gray-900 dark:text-white"
+                            }
+                          `}
+                          >
+                            {transition.label}
+                          </div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            {transition.description}
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <div className="flex-shrink-0">
+                            <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                              <CheckIcon className="w-3 h-3 text-white" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Preview */}
+            {selectedStatus !== currentStatus && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Preview Change
+                </Label>
+                <div className="flex items-center space-x-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <ArrowRightIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  <div className="text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Status will change to:{" "}
+                    </span>
+                    <span className="font-medium text-green-700 dark:text-green-300">
+                      {getSelectedStatusInfo().label}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800 rounded-b-xl border-t border-gray-200 dark:border-gray-700">
+            <div className="flex justify-end space-x-3">
+              <Button
+                variant="outline"
+                onClick={handleClose}
+                disabled={isSubmitting}
+                className="min-w-[80px]"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={selectedStatus === currentStatus || isSubmitting}
+                className="min-w-[120px]"
+              >
+                {isSubmitting ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Updating...</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <CheckIcon className="w-4 h-4" />
+                    <span>Update Status</span>
+                  </div>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 // Component: Ticket Header
 function TicketHeader({
   ticket,
@@ -408,6 +715,9 @@ function TicketHeader({
   onEdit,
   onSave,
   onCancel,
+  onStatusUpdate,
+  userRole,
+  userId,
 }: {
   ticket: Ticket;
   isEditing: boolean;
@@ -416,56 +726,133 @@ function TicketHeader({
   onEdit: () => void;
   onSave: () => void;
   onCancel: () => void;
+  onStatusUpdate: (status: TicketStatus) => void;
+  userRole: "admin" | "agent" | "user";
+  userId: string;
 }) {
   const navigate = useNavigate();
 
   return (
-    <div className="flex items-center justify-between mb-6">
-      <div className="flex items-center space-x-4">
+    <div className="bg-card border rounded-lg p-6 mb-6">
+      {/* Navigation and Actions */}
+      <div className="flex items-center justify-between mb-4">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => navigate("/tickets")}
-          className="flex items-center space-x-2"
+          className="flex items-center space-x-2 text-muted-foreground hover:text-foreground"
         >
           <ArrowLeftIcon className="w-4 h-4" />
+          <span>Back to Tickets</span>
         </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            Ticket #{ticket.id?.slice(-8)}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Created {formatDate(ticket.created_at)}
-          </p>
+
+        <div className="flex items-center space-x-2">
+          {/* Status Update */}
+          {canEdit && !isEditing && (
+            <StatusUpdateDialog
+              currentStatus={ticket.status}
+              onStatusUpdate={onStatusUpdate}
+              isSubmitting={isSubmitting}
+              userRole={userRole}
+              userId={userId}
+              ticket={ticket}
+            />
+          )}
+
+          {/* Edit Controls */}
+          {canEdit && (
+            <>
+              {isEditing ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onCancel}
+                    disabled={isSubmitting}
+                  >
+                    <XIcon className="w-4 h-4 mr-2" />
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={onSave} disabled={isSubmitting}>
+                    <SaveIcon className="w-4 h-4 mr-2" />
+                    {isSubmitting ? "Saving..." : "Save Changes"}
+                  </Button>
+                </>
+              ) : (
+                <Button size="sm" onClick={onEdit}>
+                  <EditIcon className="w-4 h-4 mr-2" />
+                  Edit Ticket
+                </Button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
-      {canEdit && (
-        <div className="flex items-center space-x-2">
-          {isEditing ? (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onCancel}
-                disabled={isSubmitting}
-              >
-                <XIcon className="w-4 h-4 mr-2" />
-                Cancel
-              </Button>
-              <Button size="sm" onClick={onSave} disabled={isSubmitting}>
-                <SaveIcon className="w-4 h-4 mr-2" />
-                {isSubmitting ? "Saving..." : "Save Changes"}
-              </Button>
-            </>
-          ) : (
-            <Button size="sm" onClick={onEdit}>
-              <EditIcon className="w-4 h-4 mr-2" />
-              Edit Ticket
-            </Button>
-          )}
+      {/* Ticket Title and Metadata */}
+      <div className="space-y-3">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-3xl font-bold text-foreground mb-2 break-words">
+              {ticket.title}
+            </h1>
+            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+              <span className="flex items-center space-x-1">
+                <span className="font-medium">ID:</span>
+                <code className="bg-muted px-2 py-1 rounded text-xs">
+                  {ticket.id?.slice(-8)}
+                </code>
+              </span>
+              <span className="flex items-center space-x-1">
+                <Calendar className="w-4 h-4" />
+                <span>Created {formatDate(ticket.created_at)}</span>
+              </span>
+              {ticket.updated_at && ticket.updated_at !== ticket.created_at && (
+                <span className="flex items-center space-x-1">
+                  <span>Updated {formatDate(ticket.updated_at)}</span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Status Badge */}
+          <div className="flex-shrink-0 ml-4">
+            <StatusBadge status={ticket.status} />
+          </div>
         </div>
-      )}
+
+        {/* Priority and Assignment Info */}
+        <div className="flex items-center space-x-6 pt-2 border-t">
+          <div className="flex items-center space-x-2">
+            <span className="text-sm font-medium text-muted-foreground">
+              Priority:
+            </span>
+            <PriorityBadge priority={ticket.priority} />
+          </div>
+
+          {ticket.assigned_to && (
+            <div className="flex items-center space-x-2">
+              <UserIcon className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">
+                Assigned to:
+              </span>
+              <span className="text-sm font-medium">
+                {ticket.assigned_to_profile?.name || "Unknown User"}
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center space-x-2">
+            <UserIcon className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-muted-foreground">
+              Created by:
+            </span>
+            <span className="text-sm font-medium">
+              {ticket.created_by_profile?.name || "Unknown User"}
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -475,578 +862,636 @@ function TicketEditForm({
   editData,
   assignableUsers,
   canAssign,
+  existingAttachments,
   onChange,
+  onFileUpload,
+  onRemoveFile,
+  onDeleteAttachment,
 }: {
   editData: EditTicketData;
   assignableUsers: Profile[];
   canAssign: boolean;
+  existingAttachments: Attachment[];
   onChange: (data: Partial<EditTicketData>) => void;
+  onFileUpload: (files: File[]) => void;
+  onRemoveFile: (index: number) => void;
+  onDeleteAttachment: (attachmentId: string) => void;
 }) {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      onFileUpload(files);
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <div>
-        <label htmlFor="description" className="block text-sm font-medium mb-2">
-          Description
-        </label>
-        <Textarea
-          id="description"
-          value={editData.description}
-          onChange={(e) => onChange({ description: e.target.value })}
-          rows={6}
-          placeholder="Ticket description"
+    <div className="space-y-6">
+      {/* Title */}
+      <div className="space-y-2">
+        <Label htmlFor="edit-title" className="text-base font-semibold">
+          Title <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          id="edit-title"
+          value={editData.title}
+          onChange={(e) => onChange({ title: e.target.value })}
+          placeholder="Ticket title"
+          className="text-base"
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="priority" className="block text-sm font-medium mb-2">
-            Priority
-          </label>
+      {/* Description */}
+      <div className="space-y-2">
+        <Label htmlFor="edit-description" className="text-base font-semibold">
+          Description <span className="text-destructive">*</span>
+        </Label>
+        <Textarea
+          id="edit-description"
+          value={editData.description}
+          onChange={(e) => onChange({ description: e.target.value })}
+          placeholder="Describe the issue or request..."
+          rows={6}
+        />
+      </div>
+
+      {/* Priority */}
+      <div className="space-y-2">
+        <Label className="text-base font-semibold">Priority</Label>
+        <Select
+          value={editData.priority}
+          onValueChange={(value) =>
+            onChange({ priority: value as TicketPriority })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PRIORITY_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-3 h-3 rounded-full ${option.color}`} />
+                  <span>{option.label}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Assignment */}
+      {canAssign && (
+        <div className="space-y-2">
+          <Label className="text-base font-semibold">Assign To</Label>
           <Select
-            value={editData.priority}
+            value={editData.assigned_to || ""}
             onValueChange={(value) =>
-              onChange({ priority: value as TicketPriority })
+              onChange({ assigned_to: value || undefined })
             }
           >
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue placeholder="Select assignee" />
             </SelectTrigger>
             <SelectContent>
-              {PRIORITY_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
+              <SelectItem value="">Unassigned</SelectItem>
+              {assignableUsers.map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
+      )}
 
-        {canAssign && (
-          <div>
-            <label
-              htmlFor="assigned_to"
-              className="block text-sm font-medium mb-2"
-            >
-              Assigned To
-            </label>
-            <Select
-              value={editData.assigned_to}
-              onValueChange={(value) => onChange({ assigned_to: value })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                {assignableUsers.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.name} ({user.email})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Component: Comment Item
-function CommentItem({ comment }: { comment: Comment }) {
-  return (
-    <div className="border-b pb-4 last:border-b-0">
-      <div className="flex items-start space-x-3">
-        <Avatar className="w-8 h-8">
-          <AvatarImage src={(comment as any).author?.avatar_url} />
-          <AvatarFallback>
-            {(comment as any).author?.name?.charAt(0) || "U"}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex-1">
-          <div className="flex items-center space-x-2 mb-1">
-            <span className="font-medium text-sm">
-              {(comment as any).author?.name || "Unknown User"}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {formatDate(comment.created_at)}
-            </span>
-            {comment.is_internal && (
-              <Badge variant="secondary" className="text-xs">
-                <EyeOffIcon className="w-3 h-3 mr-1" />
-                Internal
-              </Badge>
-            )}
-          </div>
-          <p className="text-sm text-foreground whitespace-pre-wrap">
-            {comment.content}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Component: Add Comment Form
-function AddCommentForm({
-  newComment,
-  commentType,
-  canAddInternal,
-  isSubmitting,
-  onCommentChange,
-  onTypeChange,
-  onSubmit,
-}: {
-  newComment: string;
-  commentType: CommentType;
-  canAddInternal: boolean;
-  isSubmitting: boolean;
-  onCommentChange: (value: string) => void;
-  onTypeChange: (type: CommentType) => void;
-  onSubmit: (e: React.FormEvent) => void;
-}) {
-  return (
-    <form onSubmit={onSubmit} className="border-t pt-4">
-      <div className="space-y-3">
-        <div>
-          <label htmlFor="comment" className="block text-sm font-medium mb-2">
-            Add Comment
-          </label>
-          <Textarea
-            id="comment"
-            value={newComment}
-            onChange={(e) => onCommentChange(e.target.value)}
-            placeholder="Write your comment..."
-            rows={3}
-          />
-        </div>
-
-        {canAddInternal && (
-          <div className="flex items-center space-x-4">
-            <label className="flex items-center space-x-2">
-              <input
-                type="radio"
-                name="commentType"
-                value="comment"
-                checked={commentType === "comment"}
-                onChange={(e) => onTypeChange(e.target.value as CommentType)}
-              />
-              <span className="text-sm">Public Comment</span>
-            </label>
-            <label className="flex items-center space-x-2">
-              <input
-                type="radio"
-                name="commentType"
-                value="internal_note"
-                checked={commentType === "internal_note"}
-                onChange={(e) => onTypeChange(e.target.value as CommentType)}
-              />
-              <span className="text-sm">Internal Note</span>
-            </label>
-          </div>
-        )}
-
-        <Button
-          type="submit"
-          disabled={!newComment.trim() || isSubmitting}
-          size="sm"
-        >
-          {isSubmitting ? "Adding..." : "Add Comment"}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-// Component: Ticket Info Sidebar
-function TicketInfoSidebar({ ticket }: { ticket: Ticket }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Ticket Information</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center space-x-3">
-          <UserIcon className="w-4 h-4 text-muted-foreground" />
-          <div>
-            <p className="text-sm font-medium">Created by</p>
-            <p className="text-sm text-muted-foreground">
-              {(ticket as any).created_by_profile?.name || "Unknown"}
-            </p>
-          </div>
-        </div>
-
-        {(ticket as any).assigned_to_profile && (
-          <div className="flex items-center space-x-3">
-            <UserIcon className="w-4 h-4 text-muted-foreground" />
-            <div>
-              <p className="text-sm font-medium">Assigned to</p>
-              <p className="text-sm text-muted-foreground">
-                {(ticket as any).assigned_to_profile.name}
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-center space-x-3">
-          <CalendarIcon className="w-4 h-4 text-muted-foreground" />
-          <div>
-            <p className="text-sm font-medium">Created</p>
-            <p className="text-sm text-muted-foreground">
-              {formatDate(ticket.created_at)}
-            </p>
-          </div>
-        </div>
-
-        {ticket.updated_at && ticket.updated_at !== ticket.created_at && (
-          <div className="flex items-center space-x-3">
-            <ClockIcon className="w-4 h-4 text-muted-foreground" />
-            <div>
-              <p className="text-sm font-medium">Last updated</p>
-              <p className="text-sm text-muted-foreground">
-                {formatDate(ticket.updated_at)}
-              </p>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// Component: Attachments Sidebar
-function AttachmentsSidebar({ attachments }: { attachments: Attachment[] }) {
-  if (attachments.length === 0) return null;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center space-x-2">
-          <PaperclipIcon className="w-4 h-4" />
-          <span>Attachments ({attachments.length})</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+      {/* Existing Attachments */}
+      {existingAttachments.length > 0 && (
         <div className="space-y-2">
-          {attachments.map((attachment) => (
-            <div
-              key={attachment.id}
-              className="flex items-center justify-between p-2 border rounded"
-            >
-              <span className="text-sm truncate">{attachment.filename}</span>
-              <span className="text-xs text-muted-foreground">
-                {formatFileSize(attachment.file_size)}
-              </span>
-            </div>
-          ))}
+          <Label className="text-base font-semibold">Current Attachments</Label>
+          <div className="space-y-2">
+            {existingAttachments.map((attachment) => (
+              <div
+                key={attachment.id}
+                className="flex items-center justify-between p-3 border rounded-lg"
+              >
+                <div className="flex items-center space-x-3">
+                  <span className="text-lg">
+                    {getFileIcon(attachment.file_name)}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium">
+                      {attachment.file_name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatFileSize(attachment.file_size)}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onDeleteAttachment(attachment.id)}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <TrashIcon className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      )}
+
+      {/* New Attachments */}
+      <div className="space-y-2">
+        <Label className="text-base font-semibold">
+          Add Attachments{" "}
+          {editData.attachments &&
+            editData.attachments.length > 0 &&
+            `(${editData.attachments.length})`}
+        </Label>
+        {editData.attachments && editData.attachments.length > 0 && (
+          <div className="space-y-2 mb-4">
+            {editData.attachments.map((file, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-3 border rounded-lg bg-muted/50"
+              >
+                <div className="flex items-center space-x-3">
+                  <span className="text-lg">{getFileIcon(file.name)}</span>
+                  <div>
+                    <p className="text-sm font-medium">{file.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatFileSize(file.size)}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onRemoveFile(index)}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <XIcon className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+          <input
+            type="file"
+            multiple
+            onChange={handleFileChange}
+            className="hidden"
+            id="file-upload"
+            accept="image/*,.pdf,.doc,.docx,.txt"
+          />
+          <Label htmlFor="file-upload" className="cursor-pointer">
+            <div className="space-y-2">
+              <PlusIcon className="w-8 h-8 mx-auto text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Click to upload files or drag and drop
+              </p>
+            </div>
+          </Label>
+        </div>
+      </div>
+    </div>
   );
 }
 
-// Custom hook for ticket management
-function useTicketManagement(ticket: Ticket, assignableUsers: Profile[]) {
-  const { user } = useAuth();
-  const permissions = useRolePermissions();
+// Main component
+export default function TicketDetailsPage() {
+  const loaderData = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const auth = useAuth();
+  const { user, profile } = auth;
   const submit = useSubmit();
+  const navigation = useNavigation();
 
+  const { ticket, comments, attachments, assignableUsers, error } = loaderData;
+  const isSubmitting = navigation.state === "submitting";
+
+  // State
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<EditTicketData>({
     title: ticket.title || "",
     description: ticket.description || "",
     priority: ticket.priority || "medium",
-    assigned_to: ticket.assigned_to || "unassigned",
+    assigned_to: ticket.assigned_to || undefined,
+    attachments: [],
   });
   const [newComment, setNewComment] = useState("");
   const [commentType, setCommentType] = useState<CommentType>("comment");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Permissions - get role from profile instead of user metadata
+  const userRole = profile?.role as "admin" | "agent" | "user" | undefined;
   const canEdit =
-    permissions.canManageAllTickets || ticket.created_by === user?.id;
-  const canAssign = permissions.canAssignTickets;
+    user && userRole ? canUserEditTicket(userRole, user.id, ticket) : false;
+  const permissions = userRole
+    ? ROLE_PERMISSIONS[userRole]
+    : ROLE_PERMISSIONS.user;
+  const canAssign = permissions.canAssignTickets || false;
+  const existingAttachments = attachments.filter((a) => a.id);
 
-  // Update edit data when ticket changes
-  useEffect(() => {
-    setEditData({
-      title: ticket.title || "",
-      description: ticket.description || "",
-      priority: ticket.priority || "medium",
-      assigned_to: ticket.assigned_to || "unassigned",
+  const handleSaveTicket = () => {
+    const formData = new FormData();
+    formData.append("actionType", "updateTicket");
+    formData.append("title", editData.title);
+    formData.append("description", editData.description);
+    formData.append("priority", editData.priority);
+    if (editData.assigned_to) {
+      formData.append("assigned_to", editData.assigned_to);
+    }
+
+    // Add new attachments
+    editData.attachments?.forEach((file) => {
+      formData.append("attachments", file);
     });
-  }, [ticket]);
 
-  const handleSaveTicket = async () => {
-    setIsSubmitting(true);
-    try {
-      const formData = new FormData();
-      formData.append("actionType", "updateTicket");
-      formData.append("title", editData.title);
-      formData.append("description", editData.description);
-      formData.append("priority", editData.priority);
-      formData.append(
-        "assigned_to",
-        editData.assigned_to === "unassigned" || !editData.assigned_to ? "" : editData.assigned_to
-      );
-
-      submit(formData, { method: "POST" });
-      setIsEditing(false);
-    } catch (error) {
-      console.error("Update error:", error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    submit(formData, { method: "POST" });
   };
 
-  const handleStatusTransition = async (
-    newStatus: TicketStatus,
-    transitionLabel: string
-  ) => {
-    setIsSubmitting(true);
-    try {
-      const formData = new FormData();
-      formData.append("actionType", "transitionStatus");
-      formData.append("newStatus", newStatus);
-      formData.append("transitionLabel", transitionLabel);
-
-      submit(formData, { method: "POST" });
-    } catch (error) {
-      console.error("Status transition error:", error);
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handleStatusUpdate = (status: TicketStatus) => {
+    const formData = new FormData();
+    formData.append("actionType", "updateStatus");
+    formData.append("status", status);
+    submit(formData, { method: "POST" });
   };
 
-  const handleAddComment = async (e: React.FormEvent) => {
+  const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim()) return;
 
-    setIsSubmitting(true);
-    try {
+    const formData = new FormData();
+    formData.append("actionType", "addComment");
+    formData.append("content", newComment);
+    formData.append("type", commentType);
+    submit(formData, { method: "POST" });
+  };
+
+  const handleDeleteAttachment = (attachmentId: string) => {
+    if (window.confirm("Are you sure you want to delete this attachment?")) {
       const formData = new FormData();
-      formData.append("actionType", "addComment");
-      formData.append("content", newComment);
-      formData.append("comment_type", commentType);
-      formData.append(
-        "isInternal",
-        commentType === "internal_note" ? "true" : "false"
-      );
-
+      formData.append("actionType", "deleteAttachment");
+      formData.append("attachmentId", attachmentId);
       submit(formData, { method: "POST" });
-    } catch (error) {
-      console.error("Comment error:", error);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
-  const handleActionResult = (
-    actionData: TicketDetailsActionData | undefined
-  ) => {
-    if (!actionData) return;
+  const handleFileUpload = (files: File[]) => {
+    setEditData((prev) => ({
+      ...prev,
+      attachments: [...(prev.attachments || []), ...files],
+    }));
+  };
 
-    if (actionData.success) {
-      console.log("✅ Success:", actionData.message);
+  const handleRemoveFile = (index: number) => {
+    setEditData((prev) => ({
+      ...prev,
+      attachments: prev.attachments?.filter((_, i) => i !== index) || [],
+    }));
+  };
 
-      if (actionData.message?.includes("Comment added")) {
-        setNewComment("");
-        setCommentType("comment");
-      }
-    } else {
-      alert(actionData.message);
+  // Effects
+  useEffect(() => {
+    if (actionData?.success) {
+      setNewComment("");
+      setIsEditing(false);
     }
-  };
+  }, [actionData]);
 
-  return {
-    isEditing,
-    setIsEditing,
-    editData,
-    setEditData,
-    newComment,
-    setNewComment,
-    commentType,
-    setCommentType,
-    isSubmitting,
-    canEdit,
-    canAssign,
-    handleSaveTicket,
-    handleStatusTransition,
-    handleAddComment,
-    handleActionResult,
-  };
-}
-
-// Main component
-export default function TicketDetailsPage({
-  loaderData,
-  actionData,
-}: Route.ComponentProps) {
-  const navigation = useNavigation();
-  const navigate = useNavigate();
-
-  // Handle loading state
-  if (navigation.state === "loading") {
-    return <RouteSkeleton />;
-  }
-
-  // Handle loader data
-  if (!loaderData) {
-    return <RouteSkeleton />;
-  }
-
-  const { ticket, comments, attachments, assignableUsers, error } =
-    loaderData as TicketDetailsLoaderData;
-
-  // Handle errors
   if (error) {
     return (
-      <ErrorDisplay error={error} onRetry={() => window.location.reload()} />
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 mx-auto mb-4 text-destructive" />
+          <h1 className="text-2xl font-bold mb-2">Error Loading Ticket</h1>
+          <p className="text-muted-foreground mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()}>Try Again</Button>
+        </div>
+      </div>
     );
   }
-
-  // Handle missing ticket
-  if (!ticket || !ticket.id) {
-    return (
-      <ErrorDisplay
-        error="Ticket not found"
-        onRetry={() => navigate("/tickets")}
-      />
-    );
-  }
-
-  const {
-    isEditing,
-    setIsEditing,
-    editData,
-    setEditData,
-    newComment,
-    setNewComment,
-    commentType,
-    setCommentType,
-    isSubmitting,
-    canEdit,
-    canAssign,
-    handleSaveTicket,
-    handleStatusTransition,
-    handleAddComment,
-    handleActionResult,
-  } = useTicketManagement(ticket, assignableUsers);
-
-  // Handle action results
-  useEffect(() => {
-    handleActionResult(actionData as TicketDetailsActionData);
-  }, [actionData, handleActionResult]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-full mx-auto p-6">
-        <TicketHeader
-          ticket={ticket}
-          isEditing={isEditing}
-          canEdit={canEdit}
-          isSubmitting={isSubmitting}
-          onEdit={() => setIsEditing(true)}
-          onSave={handleSaveTicket}
-          onCancel={() => setIsEditing(false)}
-        />
+    <div className="container mx-auto px-4 py-6 max-w-7xl">
+      {/* Action Data Messages */}
+      {actionData && (
+        <div
+          className={`mb-4 p-4 rounded-lg ${actionData.success ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}
+        >
+          {actionData.message}
+        </div>
+      )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Ticket Details */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    {isEditing ? (
-                      <Input
-                        value={editData.title}
-                        onChange={(e) =>
-                          setEditData((prev) => ({
-                            ...prev,
-                            title: e.target.value,
-                          }))
-                        }
-                        className="text-xl font-semibold mb-2"
-                        placeholder="Ticket title"
-                      />
-                    ) : (
-                      <CardTitle className="text-xl">{ticket.title}</CardTitle>
-                    )}
-                  </div>
-                  <div className="flex items-center space-x-2 ml-4">
-                    <StatusBadge status={ticket.status} />
-                    <PriorityBadge priority={ticket.priority} />
+      <TicketHeader
+        ticket={ticket}
+        isEditing={isEditing}
+        canEdit={canEdit}
+        isSubmitting={isSubmitting}
+        onEdit={() => setIsEditing(true)}
+        onSave={handleSaveTicket}
+        onCancel={() => setIsEditing(false)}
+        onStatusUpdate={handleStatusUpdate}
+        userRole={userRole || "user"}
+        userId={user?.id || ""}
+      />
+
+      {/* Main Content */}
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+        {/* Main Content - Takes up 3 columns */}
+        <div className="xl:col-span-3 space-y-6">
+          {/* Ticket Description */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <span>Description</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isEditing ? (
+                <TicketEditForm
+                  editData={editData}
+                  assignableUsers={assignableUsers || []}
+                  canAssign={canAssign}
+                  existingAttachments={existingAttachments}
+                  onChange={(updates) =>
+                    setEditData((prev) => ({ ...prev, ...updates }))
+                  }
+                  onFileUpload={handleFileUpload}
+                  onRemoveFile={handleRemoveFile}
+                  onDeleteAttachment={handleDeleteAttachment}
+                />
+              ) : (
+                <div className="space-y-6">
+                  <div className="prose prose-sm max-w-none dark:prose-invert">
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: sanitizeHtml(ticket.description),
+                      }}
+                    />
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent>
-                {isEditing ? (
-                  <TicketEditForm
-                    editData={editData}
-                    assignableUsers={assignableUsers}
-                    canAssign={canAssign}
-                    onChange={(updates) =>
-                      setEditData((prev) => ({ ...prev, ...updates }))
-                    }
-                  />
-                ) : (
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-foreground whitespace-pre-wrap">
-                        {ticket.description}
-                      </p>
-                    </div>
+              )}
+            </CardContent>
+          </Card>
 
-                    {/* Status Transition Component */}
-                    <div className="border-t pt-4">
-                      <StatusTransition
-                        currentStatus={ticket.status}
-                        ticket={{
-                          id: ticket.id,
-                          created_by: ticket.created_by,
-                          assigned_to: ticket.assigned_to,
-                        }}
-                        onStatusChange={handleStatusTransition}
-                        disabled={isSubmitting}
-                      />
-                    </div>
+          {/* Comments Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <MessageCircleIcon className="w-5 h-5" />
+                  <span>Activity & Comments</span>
+                  <Badge variant="secondary" className="ml-2">
+                    {(comments || []).length}
+                  </Badge>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Comments List */}
+              <div className="space-y-4">
+                {(comments || []).length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <MessageCircleIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No comments yet. Be the first to add one!</p>
                   </div>
+                ) : (
+                  (comments || []).map((comment) => (
+                    <div key={comment.id} className="border rounded-lg p-4">
+                      <div className="flex items-start space-x-3">
+                        <Avatar className="w-8 h-8">
+                          <AvatarFallback>
+                            {comment.author?.name?.charAt(0) ||
+                              comment.creator_name?.charAt(0) ||
+                              "U"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <span className="font-medium text-sm">
+                              {comment.author?.name ||
+                                comment.creator_name ||
+                                "Unknown User"}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {formatDate(comment.created_at)}
+                            </span>
+                            {comment.comment_type === "internal" && (
+                              <Badge variant="secondary" className="text-xs">
+                                Internal
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="prose prose-sm max-w-none dark:prose-invert">
+                            <div
+                              dangerouslySetInnerHTML={{
+                                __html: sanitizeHtml(comment.content),
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
                 )}
-              </CardContent>
-            </Card>
+              </div>
 
-            {/* Comments Section */}
+              {/* Add Comment Form */}
+              <div className="border-t pt-6">
+                <form onSubmit={handleAddComment} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-comment">Add Comment</Label>
+                    <Textarea
+                      id="new-comment"
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Write your comment..."
+                      rows={3}
+                    />
+                  </div>
+
+                  {canEdit && (
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="radio"
+                          id="comment"
+                          name="commentType"
+                          value="comment"
+                          checked={commentType === "comment"}
+                          onChange={(e) =>
+                            setCommentType(e.target.value as CommentType)
+                          }
+                        />
+                        <Label htmlFor="comment">Public Comment</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="radio"
+                          id="internal_note"
+                          name="commentType"
+                          value="internal"
+                          checked={commentType === "internal"}
+                          onChange={(e) =>
+                            setCommentType(e.target.value as CommentType)
+                          }
+                        />
+                        <Label htmlFor="internal_note">Internal Note</Label>
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    type="submit"
+                    disabled={!newComment.trim() || isSubmitting}
+                  >
+                    {isSubmitting ? "Adding..." : "Add Comment"}
+                  </Button>
+                </form>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sidebar - Takes up 1 column */}
+        <div className="xl:col-span-1 space-y-6">
+          {/* Ticket Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Ticket Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium text-muted-foreground">
+                  Status
+                </Label>
+                <div className="mt-1">
+                  <StatusBadge status={ticket.status} />
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-muted-foreground">
+                  Priority
+                </Label>
+                <div className="mt-1">
+                  <PriorityBadge priority={ticket.priority} />
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-muted-foreground">
+                  Created
+                </Label>
+                <p className="text-sm">{formatDate(ticket.created_at)}</p>
+              </div>
+              {ticket.updated_at && (
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">
+                    Last Updated
+                  </Label>
+                  <p className="text-sm">{formatDate(ticket.updated_at)}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Attachments */}
+          {(attachments || []).length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
-                  <MessageCircleIcon className="w-5 h-5" />
-                  <span>Comments ({comments.length})</span>
+                  <PaperclipIcon className="w-4 h-4" />
+                  <span>Attachments</span>
+                  <Badge variant="secondary" className="ml-2">
+                    {attachments.length}
+                  </Badge>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {comments.map((comment) => (
-                  <CommentItem key={comment.id} comment={comment} />
-                ))}
+              <CardContent>
+                <div className="space-y-3">
+                  {attachments.map((attachment) => {
+                    const isImage = isImageFileByName(attachment.file_name);
+                    const fileUrl = attachment.url;
 
-                <AddCommentForm
-                  newComment={newComment}
-                  commentType={commentType}
-                  canAddInternal={canEdit}
-                  isSubmitting={isSubmitting}
-                  onCommentChange={setNewComment}
-                  onTypeChange={setCommentType}
-                  onSubmit={handleAddComment}
-                />
+                    return (
+                      <div
+                        key={attachment.id}
+                        className="group border rounded-lg hover:bg-muted/50 transition-colors overflow-hidden"
+                      >
+                        {/* Image Preview */}
+                        {isImage && fileUrl && (
+                          <div className="w-full h-32 bg-muted flex items-center justify-center overflow-hidden">
+                            <img
+                              src={fileUrl}
+                              alt={attachment.file_name}
+                              className="max-w-full max-h-full object-contain"
+                              loading="lazy"
+                            />
+                          </div>
+                        )}
+
+                        {/* File Info */}
+                        <div className="flex items-center justify-between p-3">
+                          <div className="flex items-center space-x-3 flex-1 min-w-0">
+                            {!isImage && (
+                              <span className="text-2xl flex-shrink-0">
+                                {getFileIcon(attachment.file_name)}
+                              </span>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p
+                                className="text-sm font-medium truncate"
+                                title={attachment.file_name}
+                              >
+                                {attachment.file_name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatFileSize(attachment.file_size)}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (fileUrl) {
+                                  window.open(fileUrl, "_blank");
+                                }
+                              }}
+                              disabled={!fileUrl}
+                              className="flex-shrink-0"
+                              title="Download file"
+                            >
+                              <DownloadIcon className="w-4 h-4" />
+                            </Button>
+
+                            {canEdit && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  handleDeleteAttachment(attachment.id)
+                                }
+                                className="flex-shrink-0 text-destructive hover:text-destructive"
+                                title="Delete attachment"
+                              >
+                                <TrashIcon className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </CardContent>
             </Card>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            <TicketInfoSidebar ticket={ticket} />
-            <AttachmentsSidebar attachments={attachments} />
-          </div>
+          )}
         </div>
       </div>
     </div>

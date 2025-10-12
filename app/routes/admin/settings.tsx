@@ -9,32 +9,32 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { redirect, useSubmit } from "react-router";
-import { Button } from "../components/ui/button";
+import type { Route } from "../+types/admin/settings";
+import { Button } from "../../components/ui/button";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from "../components/ui/card";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
+} from "../../components/ui/card";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../components/ui/select";
-import { Switch } from "../components/ui/switch";
+} from "../../components/ui/select";
+import { Switch } from "../../components/ui/switch";
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-} from "../components/ui/tabs";
-import { Textarea } from "../components/ui/textarea";
-import { createSupabaseServerClient } from "../lib/supabase-server";
-import type { Route } from "./+types/admin.settings";
+} from "../../components/ui/tabs";
+import { Textarea } from "../../components/ui/textarea";
+import { createSupabaseServerClient } from "../../lib/supabase-server";
 
 interface SystemSettings {
   siteName: string;

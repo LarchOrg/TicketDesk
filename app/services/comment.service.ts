@@ -12,7 +12,7 @@ export function createCommentService(supabase: SupabaseClient) {
         .select(
           `
           *,
-          user:profiles!user_id(id, name, email, avatar_url, role)
+          author:profiles!user_id(id, name, email, avatar_url, role)
         `
         )
         .eq("ticket_id", ticketId)
@@ -48,7 +48,7 @@ export function createCommentService(supabase: SupabaseClient) {
         .select(
           `
           *,
-          user:profiles!user_id(id, name, email, avatar_url, role)
+          author:profiles!user_id(id, name, email, avatar_url, role)
         `
         )
         .single();
@@ -78,7 +78,7 @@ export function createCommentService(supabase: SupabaseClient) {
         .select(
           `
           *,
-          user:profiles!user_id(id, name, email, avatar_url, role)
+          author:profiles!user_id(id, name, email, avatar_url, role)
         `
         )
         .single();

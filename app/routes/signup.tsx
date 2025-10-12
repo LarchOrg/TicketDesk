@@ -112,8 +112,8 @@ function validateSignupForm(formData: SignupFormData): ValidationErrors {
 // Meta function
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Sign Up - TicketDesk" },
-    { name: "description", content: "Create your TicketDesk account" },
+    { title: "Sign Up - HelpDesk" },
+    { name: "description", content: "Create your HelpDesk account" },
   ];
 }
 
@@ -421,7 +421,7 @@ export default function SignupPage() {
               Create Account
             </CardTitle>
             <p className="text-sm text-muted-foreground text-center">
-              Join TicketDesk to manage support tickets
+              Join HelpDesk to manage support tickets
             </p>
           </CardHeader>
           <CardContent>
@@ -487,16 +487,30 @@ export default function SignupPage() {
 
               <LoadingButton loading={loading}>Create Account</LoadingButton>
 
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">
-                  Already have an account?{" "}
-                  <Link
-                    to="/login"
-                    className="font-medium text-primary hover:underline"
-                  >
-                    Sign in here
-                  </Link>
-                </p>
+              <div className="space-y-3">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Already have an account?{" "}
+                    <Link
+                      to="/login"
+                      className="font-medium text-primary hover:underline"
+                    >
+                      Sign in here
+                    </Link>
+                  </p>
+                </div>
+
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Forgot your password?{" "}
+                    <Link
+                      to="/forgot-password"
+                      className="font-medium text-primary hover:underline"
+                    >
+                      Reset it here
+                    </Link>
+                  </p>
+                </div>
               </div>
             </form>
           </CardContent>
