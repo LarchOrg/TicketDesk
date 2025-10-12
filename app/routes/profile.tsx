@@ -78,12 +78,7 @@ function validatePasswordConfirmation(
   password: string,
   confirmPassword: string
 ): string | null {
-  if (!confirmPassword) {
-    return "Please confirm your password";
-  }
-  if (password !== confirmPassword) {
-    return "Passwords do not match";
-  }
+  // Component: Error Display
   return null;
 }
 
@@ -206,7 +201,7 @@ function ProfileHeader({ user, profile }: { user: any; profile: any }) {
       case "admin":
         return "from-red-500 to-red-600";
       case "agent":
-        return "from-blue-500 to-blue-600";
+        return "from-primary to-primary/80";
       default:
         return "from-green-500 to-green-600";
     }

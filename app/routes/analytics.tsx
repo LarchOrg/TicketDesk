@@ -476,7 +476,7 @@ function MonthlyTrendsChart({ trends }: { trends: MonthlyTrend[] }) {
             indexBy="month"
             axisBottomLabel="Months"
             axisLeftLabel="Tickets"
-            colors={["#3b82f6", "#10b981"]}
+            colors={["#006868", "#10b981"]}
             rotateLabels={true}
           />
         </div>
@@ -516,7 +516,7 @@ function RecentActivityFeed({ activities }: { activities: ActivityItem[] }) {
   const getActivityIcon = (type: string) => {
     switch (type) {
       case "created":
-        return <AlertCircle className="h-4 w-4 text-blue-500" />;
+        return <AlertCircle className="h-4 w-4 text-primary" />;
       case "resolved":
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       default:
@@ -696,7 +696,7 @@ export default function AnalyticsPage() {
                 ]}
                 keys={["count"]}
                 indexBy="status"
-                colors={["#3b82f6"]}
+                colors={["#006868"]}
                 axisBottomLabel="Status"
                 axisLeftLabel="Count"
               />

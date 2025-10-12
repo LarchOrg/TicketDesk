@@ -1,5 +1,5 @@
 import { Plus, Search, Ticket } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { redirect, useNavigate, useNavigation } from "react-router";
 import DateRangeFilter from "~/components/DateRangeFilter";
 import { TicketListSkeleton } from "../components/LoadingComponents";
@@ -47,17 +47,15 @@ export async function loader({
     const url = new URL(request.url);
     const status = url.searchParams.get("status");
     const priority = url.searchParams.get("priority");
-    const search = url.searchParams.get("search");
-    const dateFrom = url.searchParams.get("date_from");
-    const dateTo = url.searchParams.get("date_to");
+    // Remove search and date range from URL params
 
     const filters: TicketFilters = {
       created_by: user.id, // Only show user's own tickets
       status: status as any,
       priority: priority as any,
-      search: search || undefined,
-      date_from: dateFrom || undefined,
-      date_to: dateTo || undefined,
+      search: undefined, // Will be handled locally
+      date_from: undefined, // Will be handled locally
+      date_to: undefined, // Will be handled locally
       sortBy: "created_at",
       sortOrder: "desc",
       limit: 50,
@@ -106,10 +104,12 @@ export const meta = () => {
 function FilterPanel({
   filters,
   onFilterChange,
+  onDateRangeChange,
   disabled = false,
 }: {
   filters: TicketFilters;
   onFilterChange: (filters: Partial<TicketFilters>) => void;
+  onDateRangeChange: (dateFrom?: string, dateTo?: string) => void;
   disabled?: boolean;
 }) {
   return (
@@ -178,12 +178,7 @@ function FilterPanel({
         <DateRangeFilter
           dateFrom={filters.date_from}
           dateTo={filters.date_to}
-          onDateRangeChange={(dateFrom: any, dateTo: any) =>
-            onFilterChange({
-              date_from: dateFrom,
-              date_to: dateTo,
-            })
-          }
+          onDateRangeChange={onDateRangeChange}
           disabled={disabled}
         />
       </div>
@@ -274,38 +269,125 @@ function TicketsList({ tickets }: { tickets: TicketType[] }) {
   );
 }
 export default function MyTickets({ loaderData }: Route.ComponentProps) {
-  const { tickets, total, filters: initialFilters, error } = loaderData;
+  const { tickets, filters: initialFilters, error } = loaderData;
   const navigate = useNavigate();
   const navigation = useNavigation();
-  const [searchTerm, setSearchTerm] = useState(initialFilters.search || "");
+
+  // Local state for search and date range (not in URL)
+  const [localSearch, setLocalSearch] = useState("");
+  const [localDateFrom, setLocalDateFrom] = useState("");
+  const [localDateTo, setLocalDateTo] = useState("");
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(
+    null
+  );
+
   const [filters, setFilters] = useState(initialFilters);
   const [isFilterLoading, setIsFilterLoading] = useState(false);
+
+  // Client-side filtered tickets
+  const [filteredTickets, setFilteredTickets] = useState(tickets);
+
+  // Function to apply client-side filters
+  const applyClientFilters = (
+    ticketList: typeof tickets,
+    search: string,
+    dateFrom: string,
+    dateTo: string
+  ) => {
+    let filtered = [...ticketList];
+
+    // Apply search filter
+    if (search.trim()) {
+      const searchLower = search.toLowerCase();
+      filtered = filtered.filter(
+        (ticket) =>
+          ticket.title.toLowerCase().includes(searchLower) ||
+          ticket.description.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Apply date range filter
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom);
+      filtered = filtered.filter(
+        (ticket) => new Date(ticket.created_at) >= fromDate
+      );
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setDate(toDate.getDate() + 1); // Include the entire end date
+      filtered = filtered.filter(
+        (ticket) => new Date(ticket.created_at) < toDate
+      );
+    }
+
+    return filtered;
+  };
+
+  // Update filtered tickets when tickets or local filters change
+  useEffect(() => {
+    const filtered = applyClientFilters(
+      tickets,
+      localSearch,
+      localDateFrom,
+      localDateTo
+    );
+    setFilteredTickets(filtered);
+  }, [tickets, localSearch, localDateFrom, localDateTo]);
 
   // Check if we're navigating to this route or if filters are being applied
   const isLoading = navigation.state === "loading" || isFilterLoading;
 
   const handleFilterChange = (newFilters: Partial<TicketFilters>) => {
-    const updatedFilters = { ...filters, ...newFilters };
-    setFilters(updatedFilters);
-    setIsFilterLoading(true);
+    // Only handle server-side filters (status, priority)
+    const serverFilters = { ...filters };
+    let shouldNavigate = false;
 
-    // Update URL with new filters
-    const params = new URLSearchParams();
-    if (updatedFilters.status) params.set("status", updatedFilters.status);
-    if (updatedFilters.priority)
-      params.set("priority", updatedFilters.priority);
-    if (searchTerm) params.set("search", searchTerm);
+    if (newFilters.status !== undefined) {
+      serverFilters.status = newFilters.status;
+      shouldNavigate = true;
+    }
+    if (newFilters.priority !== undefined) {
+      serverFilters.priority = newFilters.priority;
+      shouldNavigate = true;
+    }
 
-    navigate(`/my-tickets?${params.toString()}`, { replace: true });
+    if (shouldNavigate) {
+      setFilters(serverFilters);
+      setIsFilterLoading(true);
 
-    // Reset loading state after a short delay to allow navigation to complete
-    setTimeout(() => setIsFilterLoading(false), 500);
+      // Update URL with new filters (exclude search and date range)
+      const params = new URLSearchParams();
+      if (serverFilters.status) params.set("status", serverFilters.status);
+      if (serverFilters.priority)
+        params.set("priority", serverFilters.priority);
+
+      navigate(`/my-tickets?${params.toString()}`, { replace: true });
+
+      // Reset loading state after a short delay to allow navigation to complete
+      setTimeout(() => setIsFilterLoading(false), 500);
+    }
   };
 
-  const handleSearch = () => {
-    setIsFilterLoading(true);
-    handleFilterChange({ search: searchTerm });
-  };
+  // Simplified search timeout for UX
+  useEffect(() => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    const timeout = setTimeout(() => {
+      // The filtering is now handled by the client-side filter effect
+    }, 300);
+
+    setSearchTimeout(timeout);
+
+    return () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [localSearch]);
 
   if (error) {
     return (
@@ -327,7 +409,8 @@ export default function MyTickets({ loaderData }: Route.ComponentProps) {
           <div>
             <h1 className="text-3xl font-bold">My Tickets</h1>
             <p className="text-muted-foreground">
-              View and manage your submitted support tickets ({total} total)
+              View and manage your submitted support tickets (
+              {filteredTickets.length} total)
             </p>
           </div>
           <Button onClick={() => navigate("/newtickets")}>
@@ -344,16 +427,12 @@ export default function MyTickets({ loaderData }: Route.ComponentProps) {
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search your tickets..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
               className="pl-10"
               disabled={isLoading}
             />
           </div>
-          <Button onClick={handleSearch} disabled={isLoading}>
-            {isLoading ? "Searching..." : "Search"}
-          </Button>
         </div>
       </div>
 
@@ -361,8 +440,17 @@ export default function MyTickets({ loaderData }: Route.ComponentProps) {
         {/* Filters Sidebar */}
         <div className="">
           <FilterPanel
-            filters={filters}
+            filters={{
+              ...filters,
+              search: localSearch,
+              date_from: localDateFrom,
+              date_to: localDateTo,
+            }}
             onFilterChange={handleFilterChange}
+            onDateRangeChange={(dateFrom, dateTo) => {
+              setLocalDateFrom(dateFrom || "");
+              setLocalDateTo(dateTo || "");
+            }}
             disabled={isLoading}
           />
         </div>
@@ -372,7 +460,7 @@ export default function MyTickets({ loaderData }: Route.ComponentProps) {
           {isLoading ? (
             <TicketListSkeleton />
           ) : (
-            <TicketsList tickets={tickets} />
+            <TicketsList tickets={filteredTickets} />
           )}
         </div>
       </div>

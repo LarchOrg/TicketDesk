@@ -98,14 +98,14 @@ type ActionType =
 
 // Constants
 const PRIORITY_OPTIONS = [
-  { value: "low", label: "Low", color: "bg-blue-500" },
+  { value: "low", label: "Low", color: "bg-primary" },
   { value: "medium", label: "Medium", color: "bg-yellow-500" },
   { value: "high", label: "High", color: "bg-orange-500" },
   { value: "critical", label: "Critical", color: "bg-red-500" },
 ] as const;
 
 const STATUS_OPTIONS = [
-  { value: "open", label: "Open", color: "bg-blue-500", icon: XCircleIcon },
+  { value: "open", label: "Open", color: "bg-primary", icon: XCircleIcon },
   {
     value: "in_progress",
     label: "In Progress",
@@ -414,7 +414,7 @@ function StatusBadge({ status }: { status: TicketStatus }) {
   const getStatusColor = (status: TicketStatus) => {
     switch (status) {
       case "open":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
+        return "bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary";
       case "in_progress":
         return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
       case "resolved":

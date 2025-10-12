@@ -87,7 +87,7 @@ export default function DashboardStats({ stats, trends }: DashboardStatsProps) {
       title: "Total Tickets",
       value: stats.total,
       icon: Ticket,
-      color: "bg-gradient-to-br from-blue-500 to-blue-600",
+      color: "bg-gradient-to-br from-primary to-primary/80",
       trend: trends?.total,
     },
     {

@@ -246,7 +246,7 @@ export default function UserDashboard({ loaderData }: Route.ComponentProps) {
           title="Total Tickets"
           value={stats.total}
           icon={Ticket}
-          color="text-blue-600"
+          color="text-primary"
         />
         <StatsCard
           title="Open"

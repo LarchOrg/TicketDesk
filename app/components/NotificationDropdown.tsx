@@ -128,7 +128,7 @@ export default function NotificationDropdown() {
               <DropdownMenuItem
                 key={notification.id}
                 className={`p-3 cursor-pointer ${
-                  !notification.read ? "bg-blue-50 dark:bg-blue-950" : ""
+                  !notification.read ? "bg-primary/5 dark:bg-primary/10" : ""
                 }`}
                 onClick={() => {
                   if (!notification.read) {
@@ -145,7 +145,7 @@ export default function NotificationDropdown() {
                         {notification.title}
                       </p>
                       {!notification.read && (
-                        <div className="w-2 h-2 bg-blue-500 rounded-full ml-2 flex-shrink-0" />
+                        <div className="w-2 h-2 bg-primary rounded-full ml-2 flex-shrink-0" />
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">

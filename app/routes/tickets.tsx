@@ -1,4 +1,4 @@
-import { Grid, List, Plus } from "lucide-react";
+import { Grid, List } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   redirect,
@@ -78,9 +78,10 @@ function parseFiltersFromUrl(url: URL): TicketFilters {
   return {
     status: url.searchParams.get("status") || undefined,
     priority: url.searchParams.get("priority") || undefined,
-    search: url.searchParams.get("search") || undefined,
-    date_from: url.searchParams.get("date_from") || undefined,
-    date_to: url.searchParams.get("date_to") || undefined,
+    // Remove search and date range from URL params
+    search: undefined,
+    date_from: undefined,
+    date_to: undefined,
     sortBy: url.searchParams.get("sortBy") || DEFAULT_FILTERS.sortBy,
     sortOrder:
       (url.searchParams.get("sortOrder") as "asc" | "desc") ||
@@ -406,8 +407,7 @@ function PageHeader({
           onClick={onCreateTicket}
           className="flex items-center space-x-2"
         >
-          <Plus className="w-4 h-4" />
-          <span>New Ticket</span>
+          <span>Create New Ticket</span>
         </Button>
       </div>
     </div>
@@ -466,6 +466,8 @@ function EmptyState({ onCreateTicket }: { onCreateTicket: () => void }) {
 function FilterPanel({
   filters,
   onFilterChange,
+  onSearchChange,
+  onDateRangeChange,
   disabled = false,
 }: {
   filters: {
@@ -476,6 +478,8 @@ function FilterPanel({
     date_to: string;
   };
   onFilterChange: (filters: Partial<TicketFilters>) => void;
+  onSearchChange: (search: string) => void;
+  onDateRangeChange: (dateFrom?: string, dateTo?: string) => void;
   disabled?: boolean;
 }) {
   return (
@@ -494,7 +498,7 @@ function FilterPanel({
             type="text"
             placeholder="Search tickets..."
             value={filters.search}
-            onChange={(e) => onFilterChange({ search: e.target.value })}
+            onChange={(e) => onSearchChange(e.target.value)}
             className="w-64"
             disabled={disabled}
           />
@@ -559,12 +563,7 @@ function FilterPanel({
         <DateRangeFilter
           dateFrom={filters.date_from || undefined}
           dateTo={filters.date_to || undefined}
-          onDateRangeChange={(dateFrom, dateTo) =>
-            onFilterChange({
-              date_from: dateFrom,
-              date_to: dateTo,
-            })
-          }
+          onDateRangeChange={onDateRangeChange}
           disabled={disabled}
         />
       </div>
@@ -718,12 +717,113 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
   // Show loading state during navigation
   const isLoading = navigation.state === "loading";
 
+  // Local state for search and date range (not in URL)
+  const [localSearch, setLocalSearch] = useState("");
+  const [localDateFrom, setLocalDateFrom] = useState("");
+  const [localDateTo, setLocalDateTo] = useState("");
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(
+    null
+  );
+
+  // Client-side filtered tickets
+  const [filteredTickets, setFilteredTickets] = useState(tickets);
+  const [filteredStats, setFilteredStats] = useState(stats);
+
+  // Function to apply client-side filters
+  const applyClientFilters = (
+    ticketList: typeof tickets,
+    search: string,
+    dateFrom: string,
+    dateTo: string
+  ) => {
+    let filtered = [...ticketList];
+
+    // Apply search filter
+    if (search.trim()) {
+      const searchLower = search.toLowerCase();
+      filtered = filtered.filter(
+        (ticket) =>
+          ticket.title.toLowerCase().includes(searchLower) ||
+          ticket.description.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Apply date range filter
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom);
+      filtered = filtered.filter(
+        (ticket) => new Date(ticket.created_at) >= fromDate
+      );
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setDate(toDate.getDate() + 1); // Include the entire end date
+      filtered = filtered.filter(
+        (ticket) => new Date(ticket.created_at) < toDate
+      );
+    }
+
+    return filtered;
+  };
+
+  // Update filtered tickets when tickets or local filters change
+  useEffect(() => {
+    const filtered = applyClientFilters(
+      tickets,
+      localSearch,
+      localDateFrom,
+      localDateTo
+    );
+    setFilteredTickets(filtered);
+
+    // Recalculate stats for filtered tickets
+    const newStats = {
+      total: filtered.length,
+      open: filtered.filter((t) => t.status === "open").length,
+      in_progress: filtered.filter((t) => t.status === "in_progress").length,
+      resolved: filtered.filter((t) => t.status === "resolved").length,
+      closed: filtered.filter((t) => t.status === "closed").length,
+      reopened: filtered.filter((t) => t.status === "reopened").length,
+      low: filtered.filter((t) => t.priority === "low").length,
+      medium: filtered.filter((t) => t.priority === "medium").length,
+      high: filtered.filter((t) => t.priority === "high").length,
+      critical: filtered.filter((t) => t.priority === "critical").length,
+    };
+    setFilteredStats(newStats);
+  }, [tickets, localSearch, localDateFrom, localDateTo]);
+
+  // Delayed search effect (simplified)
+  useEffect(() => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    const timeout = setTimeout(() => {
+      // The filtering is now handled by the useEffect above
+      // This timeout is just for UX to show that search is being processed
+    }, 300); // Reduced delay since it's client-side
+
+    setSearchTimeout(timeout);
+
+    return () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [localSearch]);
+
   // Handle filter changes
   const handleFilterChange = (newFilters: Partial<TicketFilters>) => {
     const url = new URL(window.location.href);
 
-    // Update URL parameters
+    // Update URL parameters (exclude search and date range)
     Object.entries(newFilters).forEach(([key, value]) => {
+      // Skip search and date range - these are handled locally
+      if (key === "search" || key === "date_from" || key === "date_to") {
+        return;
+      }
+
       if (value === undefined || value === "") {
         url.searchParams.delete(key);
       } else {
@@ -749,6 +849,7 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
             <ErrorDisplay error={loaderError} />
           </div>
         </div>
+        <StatsGrid stats={filteredStats} />
         <ToastContainer toasts={toasts} onRemove={removeToast} />
       </>
     );
@@ -767,26 +868,36 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
           <StatsGrid stats={stats} />
 
           <FilterPanel
-            filters={filters}
+            filters={{
+              ...filters,
+              search: localSearch,
+              date_from: localDateFrom,
+              date_to: localDateTo,
+            }}
             onFilterChange={handleFilterChange}
+            onSearchChange={setLocalSearch}
+            onDateRangeChange={(dateFrom, dateTo) => {
+              setLocalDateFrom(dateFrom || "");
+              setLocalDateTo(dateTo || "");
+            }}
             disabled={isLoading}
           />
 
           {/* Tickets Display */}
           {isLoading ? (
             <TicketListSkeleton />
-          ) : tickets.length === 0 ? (
+          ) : filteredTickets.length === 0 ? (
             <EmptyState onCreateTicket={handleCreateTicket} />
           ) : viewMode === "grid" ? (
             <TicketsGrid
-              tickets={tickets}
+              tickets={filteredTickets}
               onTicketClick={handleTicketClick}
               onDeleteTicket={handleDeleteTicket}
               canDelete={canDelete}
             />
           ) : (
             <TicketTable
-              tickets={tickets}
+              tickets={filteredTickets}
               onTicketClick={handleTicketClick}
               onEdit={handleEditTicket}
               onDelete={(ticket: Ticket) => handleDeleteTicket(ticket.id)}

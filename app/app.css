@@ -70,15 +70,15 @@ body {
   --popover: oklch(100% 0 270);
   --popover-foreground: var(--foreground);
 
-  /* Primary (new blue) */
-  --primary: oklch(55.937% 0.18003 255.029); /* Calm modern blue */
-  --primary-foreground: oklch(98% 0.005 270);
+  /* Primary (#006868 theme) */
+  --primary: oklch(40% 0.08 180); /* #006868 converted to OKLCH */
+  --primary-foreground: oklch(98% 0.005 180);
 
   /* Secondary & Muted */
-  --secondary: oklch(96% 0.01 270);
+  --secondary: oklch(96% 0.01 180);
   --secondary-foreground: var(--foreground);
-  --muted: oklch(94% 0.01 270);
-  --muted-foreground: oklch(55% 0.01 270);
+  --muted: oklch(94% 0.01 180);
+  --muted-foreground: oklch(55% 0.01 180);
 
   /* Accent */
   --accent: oklch(95% 0.02 180);
@@ -93,15 +93,15 @@ body {
   --input: var(--border);
   --ring: var(--primary);
 
-  /* Charts */
-  --chart-1: oklch(60% 0.18 255); /* matches primary */
-  --chart-2: oklch(65% 0.18 150);
-  --chart-3: oklch(70% 0.16 40);
-  --chart-4: oklch(72% 0.19 310);
-  --chart-5: oklch(68% 0.2 20);
+  /* Charts - all based on #006868 theme */
+  --chart-1: oklch(40% 0.08 180); /* matches primary */
+  --chart-2: oklch(45% 0.08 160); /* slightly lighter, different hue */
+  --chart-3: oklch(50% 0.08 200); /* lighter, blue-green */
+  --chart-4: oklch(35% 0.08 170); /* darker, similar hue */
+  --chart-5: oklch(55% 0.08 190); /* lightest variation */
 
   /* Sidebar */
-  --sidebar: oklch(99% 0.005 270);
+  --sidebar: oklch(99% 0.005 180);
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
@@ -118,8 +118,11 @@ body {
   --card-foreground: oklch(0.95 0 0);
   --popover: oklch(0.13 0 0);
   --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.7 0.2 264);
+
+  /* Primary - brighter version of #006868 for dark mode */
+  --primary: oklch(60% 0.12 180); /* brighter teal for dark mode */
   --primary-foreground: oklch(0.09 0 0);
+
   --secondary: oklch(0.18 0 0);
   --secondary-foreground: oklch(0.95 0 0);
   --muted: oklch(0.18 0 0);
@@ -130,20 +133,23 @@ body {
   --destructive-foreground: oklch(0.95 0 0);
   --border: oklch(0.25 0 0);
   --input: oklch(0.25 0 0);
-  --ring: oklch(0.7 0.2 264);
-  --chart-1: oklch(0.49 0.24 264);
-  --chart-2: oklch(0.7 0.17 162);
-  --chart-3: oklch(0.77 0.19 70);
-  --chart-4: oklch(0.63 0.27 304);
-  --chart-5: oklch(0.65 0.25 16);
+  --ring: oklch(60% 0.12 180);
+
+  /* Charts - dark mode variations of #006868 theme */
+  --chart-1: oklch(60% 0.12 180); /* matches primary */
+  --chart-2: oklch(65% 0.12 160); /* lighter, different hue */
+  --chart-3: oklch(70% 0.12 200); /* lighter, blue-green */
+  --chart-4: oklch(55% 0.12 170); /* darker, similar hue */
+  --chart-5: oklch(75% 0.12 190); /* lightest variation */
+
   --sidebar: oklch(0.13 0 0);
   --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.7 0.2 264);
+  --sidebar-primary: oklch(60% 0.12 180);
   --sidebar-primary-foreground: oklch(0.09 0 0);
   --sidebar-accent: oklch(0.18 0 0);
   --sidebar-accent-foreground: oklch(0.95 0 0);
   --sidebar-border: oklch(0.25 0 0);
-  --sidebar-ring: oklch(0.7 0.2 264);
+  --sidebar-ring: oklch(60% 0.12 180);
 }
 
 @layer base {

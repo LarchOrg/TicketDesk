@@ -25,13 +25,13 @@ const navigation = [
     name: "All Tickets",
     href: "/tickets",
     icon: Ticket,
-    roles: ["agent", "admin"],
+    roles: ["user", "agent", "admin"],
   },
   {
     name: "My Tickets",
     href: "/my-tickets",
     icon: FileText,
-    roles: ["user", "agent", "admin"],
+    roles: ["agent", "admin"],
   },
 ];
 
@@ -80,7 +80,19 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
       <div
         className={`flex items-center justify-between border-b border-border h-18 ${isCollapsed ? "px-4" : "px-6"}`}
       >
-        {!isCollapsed && (
+        {isCollapsed ? (
+          // Show just the HelpDesk icon when collapsed - make it clickable to expand
+          <button
+            onClick={toggleSidebar}
+            className="flex items-center justify-center w-full rounded-lg hover:bg-muted/50 transition-colors group cursor-pointer"
+            title="Expand HelpDesk sidebar"
+          >
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+              <Ticket className="w-5 h-5 text-primary-foreground" />
+            </div>
+          </button>
+        ) : (
+          // Show full branding when expanded
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
               <Ticket className="w-5 h-5 text-primary-foreground" />
@@ -100,7 +112,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
         {/* Menu Toggle Button */}
         <button
           onClick={toggleSidebar}
-          className="p-2 rounded-lg hover:bg-muted transition-colors flex-shrink-0"
+          className={`p-2 rounded-lg hover:bg-muted transition-colors flex-shrink-0 ${isCollapsed ? "absolute top-4 right-4" : ""}`}
           title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {isCollapsed ? (

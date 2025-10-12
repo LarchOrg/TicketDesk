@@ -105,7 +105,7 @@ export async function loader({
         const users = await services.users.getAllUsers();
         const agents = await services.users.getAssignableUsers();
 
-        const ticketActivity = await services.tickets.getRecentActivity(10);
+        const ticketActivity = await services.tickets.getRecentActivity(5);
         const recentUsers = await services.users.getRecentUsers(5);
         const userActivity = (recentUsers || []).map((user) => ({
           id: `user-registered-${user.id}`,
@@ -309,9 +309,9 @@ function TicketQueue({
     <div className="mb-6">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>{title}</CardTitle>
+          <CardTitle className="mb-6">{title}</CardTitle>
           {showSearch && (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 space-y-2">
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -419,18 +419,18 @@ function UserQuickActions() {
       <CardContent className="space-y-2">
         <Button
           onClick={() => navigate("/newtickets")}
-          className="w-full justify-start"
+          className="w-full justify-start p-10"
         >
           <Plus className="mr-2 h-4 w-4" />
           Create New Ticket
         </Button>
         <Button
           variant="outline"
-          onClick={() => navigate("/my-tickets")}
-          className="w-full justify-start"
+          onClick={() => navigate("/tickets")}
+          className="w-full justify-start p-10"
         >
-          <Ticket className="mr-2 h-4 w-4" />
-          View My Tickets
+          <Ticket className="mr-2 h-4 w-4 " />
+          View All Tickets
         </Button>
       </CardContent>
     </Card>
@@ -445,9 +445,9 @@ function RecentActivity({ activities }: { activities: any[] }) {
     switch (iconType) {
       case "ticket":
         return (
-          <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30">
+          <div className="p-2 rounded-full bg-primary/10 dark:bg-primary/20">
             <Ticket
-              className={`${iconClasses} text-blue-600 dark:text-blue-400`}
+              className={`${iconClasses} text-primary dark:text-primary`}
             />
           </div>
         );
@@ -490,7 +490,7 @@ function RecentActivity({ activities }: { activities: any[] }) {
     switch (type) {
       case "ticket_created":
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary">
             New Ticket
           </span>
         );
@@ -709,7 +709,7 @@ export default function UnifiedDashboard({ loaderData }: Route.ComponentProps) {
       },
     ];
 
-    const statsToShow = role === "admin" ? baseStats : baseStats.slice(0, 4);
+    const statsToShow = baseStats;
 
     return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
@@ -730,7 +730,7 @@ export default function UnifiedDashboard({ loaderData }: Route.ComponentProps) {
             title="My Performance"
             value={myStats.resolved}
             icon={TrendingUp}
-            color="text-blue-600"
+            color="text-primary"
             subtitle={`${myStats.assigned} assigned • ${myStats.avgResponseTime} avg response`}
           />
         )}
@@ -759,8 +759,7 @@ export default function UnifiedDashboard({ loaderData }: Route.ComponentProps) {
               size="lg"
               className="shadow-lg hover:shadow-xl transition-shadow"
             >
-              <Plus className="mr-2 h-4 w-4" />
-              New Ticket
+              Create New Ticket
             </Button>
           )}
         </div>
@@ -853,8 +852,8 @@ export default function UnifiedDashboard({ loaderData }: Route.ComponentProps) {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
                       <div className="flex items-center gap-2">
-                        <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30">
-                          <UserPlus className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <div className="p-2 rounded-full bg-primary/10 dark:bg-primary/20">
+                          <UserPlus className="h-4 w-4 text-primary dark:text-primary" />
                         </div>
                         <span className="text-sm font-medium">Total Users</span>
                       </div>
@@ -921,7 +920,7 @@ export default function UnifiedDashboard({ loaderData }: Route.ComponentProps) {
                   </div>
                   <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                     <span className="text-sm font-medium">Assigned</span>
-                    <span className="text-lg font-bold text-blue-600">
+                    <span className="text-lg font-bold text-primary">
                       {myStats.assigned}
                     </span>
                   </div>

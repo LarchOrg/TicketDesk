@@ -249,7 +249,7 @@ function OverviewTab({
           title="Total Tickets"
           value={stats.total}
           icon={Ticket}
-          color="text-blue-600"
+          color="text-primary"
           trend={{ value: 12, isPositive: true }}
         />
         <StatsCard

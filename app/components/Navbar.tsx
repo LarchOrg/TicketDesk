@@ -123,23 +123,27 @@ export function Navbar({
 
           {/* Right Section - Actions and User Menu */}
           <div className="flex items-center gap-3">
-            {/* New Ticket Button */}
+            {/* New Ticket Button - Redesigned */}
             <Button
               onClick={onCreateTicket}
-              className="cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm transition-all duration-200 hover:shadow-md hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg font-medium"
+              className="cursor-pointer bg-gradient-to-r from-primary to-primary/100 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-300 hidden sm:flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm border border-primary/20 hover:border-primary/30 hover:scale-105 transform"
             >
-              <Plus className="h-4 w-4" />
-              New Ticket
+              <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center">
+                <Plus className="h-3 w-3" />
+              </div>
+              <span className="tracking-wide">New Ticket</span>
             </Button>
 
-            {/* Mobile New Ticket Button */}
+            {/* Mobile New Ticket Button - Redesigned */}
             <Button
               onClick={onCreateTicket}
               size="sm"
-              className="cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm transition-all duration-200 hover:shadow-md sm:hidden rounded-lg"
+              className="cursor-pointer bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-300 sm:hidden rounded-xl border border-primary/20 hover:border-primary/30 hover:scale-105 transform p-3"
               aria-label="Create new ticket"
             >
-              <Plus className="h-4 w-4" />
+              <div className="w-4 h-4 bg-white/20 rounded-full flex items-center justify-center">
+                <Plus className="h-2.5 w-2.5" />
+              </div>
             </Button>
 
             {/* Dark Mode Toggle */}
