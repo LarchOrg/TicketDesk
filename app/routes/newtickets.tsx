@@ -1,7 +1,7 @@
-import { useState } from "react";
 import { redirect, useNavigate, useNavigation } from "react-router";
 import { FormSkeleton } from "~/components/LoadingComponents";
 import TicketForm from "~/components/TicketForm";
+import { ToastContainer, useToast } from "~/components/Toast";
 import { DEFAULT_PRIORITY } from "~/lib/constants";
 import { createSupabaseServerClient } from "~/lib/supabase-server";
 import type { Profile, TicketFormData, TicketPriority } from "~/lib/types";
@@ -251,8 +251,8 @@ function ErrorDisplay({ error }: { error: string }) {
 export default function NewTicketPage({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const navigate = useNavigate();
-  const [error, setError] = useState<string | null>(null);
-  // Handle loader data
+  const { toasts, removeToast, success, error } = useToast();
+
   if (!loaderData) {
     return <FormSkeleton />;
   }
@@ -275,8 +275,6 @@ export default function NewTicketPage({ loaderData }: Route.ComponentProps) {
   }
 
   const handleSubmit = async (formData: TicketFormData) => {
-    setError(null);
-
     try {
       const submitFormData = new FormData();
       submitFormData.append("title", formData.title);
@@ -313,21 +311,18 @@ export default function NewTicketPage({ loaderData }: Route.ComponentProps) {
           throw new Error(data.error || "Failed to create ticket");
         }
       }
-
-      // If we get here and no redirect happened, navigate manually
+      success("Ticket Created", "The ticket was successfully created.");
       navigate("/tickets");
     } catch (err) {
-      setError(
+      error(
         err instanceof Error ? err.message : "An unexpected error occurred"
       );
-      throw err; // Re-throw to let the form handle it
+      throw err;
     }
   };
 
   return (
     <div className="max-w-full mx-auto space-y-6 p-6">
-      {error && <ErrorDisplay error={error} />}
-
       {/* Ticket Form */}
       <TicketForm
         onSubmit={handleSubmit}
@@ -335,6 +330,7 @@ export default function NewTicketPage({ loaderData }: Route.ComponentProps) {
         assignableUsers={assignableUsers}
         isSubmitting={navigation.state === "submitting"}
       />
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

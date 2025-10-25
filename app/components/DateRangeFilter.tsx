@@ -285,7 +285,7 @@ export default function DateRangeFilter({
             <DialogTitle>Select Date Range</DialogTitle>
           </DialogHeader>
 
-          <div className="calendar-date-picker">
+          <div className="calendar-date-picker pt-3">
             {/* Quick Range Selection */}
             <div className="mb-4 quick-range-buttons">
               <div className="grid grid-cols-2 gap-2">

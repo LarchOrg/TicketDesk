@@ -15,7 +15,7 @@ import {
 } from "./ui/select";
 
 interface TicketFormProps {
-  onSubmit: (data: TicketFormData) => Promise<void>;
+  onSubmit: (data: TicketFormData) => void;
   initialData?: Partial<TicketFormData>;
   isEditing?: boolean;
   className?: string;
@@ -162,7 +162,7 @@ export default function TicketForm({
   };
 
   return (
-    <Card className={`w-full max-w-5xl mx-auto shadow-lg ${className}`}>
+    <Card className={`w-full mx-auto shadow-lg ${className}`}>
       <CardHeader className="border-b">
         <CardTitle className="flex items-center space-x-2 text-2xl">
           <FileText className="w-6 h-6 text-primary" />

@@ -25,7 +25,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
 
   // Fetch user profile from database
   const fetchProfile = async (userId: string) => {
@@ -50,68 +49,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize auth state ONCE
   useEffect(() => {
-    // Skip if already initialized
-    if (initialized) return;
-
     let mounted = true;
 
-    const initializeAuth = async () => {
+    const init = async () => {
       try {
-        console.log("🔐 Initializing authentication...");
-
-        // Get initial session
         const {
           data: { session },
         } = await supabase.auth.getSession();
 
-        if (mounted) {
-          if (session?.user) {
-            console.log("✅ User session found:", session.user.email);
-            setUser(session.user);
-            const userProfile = await fetchProfile(session.user.id);
-            setProfile(userProfile);
-          } else {
-            console.log("❌ No user session found");
-            setUser(null);
-            setProfile(null);
-          }
-          setLoading(false);
-          setInitialized(true);
+        if (!mounted) return;
+
+        if (session?.user) {
+          setUser(session.user);
+          const userProfile = await fetchProfile(session.user.id);
+          setProfile(userProfile);
+        } else {
+          setUser(null);
+          setProfile(null);
         }
-      } catch (error) {
-        console.error("Error initializing auth:", error);
-        if (mounted) {
-          setLoading(false);
-          setInitialized(true);
-        }
+      } catch (err) {
+        console.error("Error initializing auth:", err);
+      } finally {
+        if (mounted) setLoading(false);
       }
     };
 
-    initializeAuth();
+    init();
 
-    // Listen for auth changes (login/logout only)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("🔄 Auth state changed:", event);
-
-      // Only update on actual auth events, not on token refresh
       if (
         event === "SIGNED_IN" ||
         event === "SIGNED_OUT" ||
         event === "USER_UPDATED"
       ) {
-        if (mounted) {
-          if (session?.user) {
-            console.log("✅ User signed in:", session.user.email);
-            setUser(session.user);
-            const userProfile = await fetchProfile(session.user.id);
-            setProfile(userProfile);
-          } else {
-            console.log("❌ User signed out");
-            setUser(null);
-            setProfile(null);
-          }
+        if (session?.user) {
+          setUser(session.user);
+          const userProfile = await fetchProfile(session.user.id);
+          setProfile(userProfile);
+        } else {
+          setUser(null);
+          setProfile(null);
         }
       }
     });
@@ -120,12 +99,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [initialized]);
+  }, []);
 
   // Sign out function
   const signOut = async () => {
     try {
-      console.log("🚪 Signing out...");
       await supabase.auth.signOut();
       setUser(null);
       setProfile(null);
@@ -135,10 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Refresh session function
   const refreshSession = async () => {
     try {
-      console.log("🔄 Refreshing session...");
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -147,6 +123,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session.user);
         const userProfile = await fetchProfile(session.user.id);
         setProfile(userProfile);
+      } else {
+        setUser(null);
+        setProfile(null);
       }
     } catch (error) {
       console.error("Error refreshing session:", error);

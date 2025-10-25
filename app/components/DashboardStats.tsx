@@ -29,7 +29,7 @@ function StatsCard({ title, value, icon: Icon, color, trend }: StatsCardProps) {
           <p className="text-sm font-semibold text-muted-foreground mb-2">
             {title}
           </p>
-          <p className="text-3xl font-bold text-foreground mb-3">
+          <p className="text-2xl font-bold text-foreground mb-3">
             {value.toLocaleString()}
           </p>
           {trend && (

@@ -1,8 +1,6 @@
 import {
-  AlertCircle,
-  ArrowLeftIcon,
+  ArrowLeft,
   ArrowRightIcon,
-  Calendar,
   CheckCircle2Icon,
   CheckIcon,
   DownloadIcon,
@@ -20,13 +18,14 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
+  Link,
   useActionData,
   useLoaderData,
-  useNavigate,
   useNavigation,
   useSubmit,
 } from "react-router";
 import PriorityBadge from "~/components/PriorityBadge";
+import { ToastContainer, useToast } from "~/components/Toast";
 import { Avatar, AvatarFallback } from "~/components/ui/avatar";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -89,7 +88,7 @@ interface EditTicketData {
   attachments?: File[];
 }
 
-type CommentType = "comment" | "internal";
+type CommentType = "comment" | "internal_note";
 type ActionType =
   | "updateTicket"
   | "updateStatus"
@@ -317,7 +316,6 @@ export async function action({
           title: "Ticket Status Updated",
           message: `Ticket status changed to ${status.replace("_", " ")}`,
         });
-
         return { success: true, message: "Ticket status updated successfully" };
       }
 
@@ -380,7 +378,6 @@ export async function action({
             message: `New comment added to your ticket`,
           });
         }
-
         return { success: true, message: "Comment added successfully" };
       }
 
@@ -388,7 +385,6 @@ export async function action({
         const attachmentId = formData.get("attachmentId") as string;
 
         await services.attachments.deleteAttachment(attachmentId);
-
         return { success: true, message: "Attachment deleted successfully" };
       }
 
@@ -420,14 +416,14 @@ function StatusBadge({ status }: { status: TicketStatus }) {
       case "resolved":
         return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
       case "closed":
-        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
+        return "bg-gray-500 text-white dark:bg-gray-300 dark:text-black";
       default:
         return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
     }
   };
 
   return (
-    <Badge className={getStatusColor(status)}>
+    <Badge className={`${getStatusColor(status)}`}>
       {status.replace("_", " ").toUpperCase()}
     </Badge>
   );
@@ -712,6 +708,7 @@ function TicketHeader({
   isEditing,
   canEdit,
   isSubmitting,
+  hasChanges,
   onEdit,
   onSave,
   onCancel,
@@ -723,6 +720,7 @@ function TicketHeader({
   isEditing: boolean;
   canEdit: boolean;
   isSubmitting: boolean;
+  hasChanges: boolean;
   onEdit: () => void;
   onSave: () => void;
   onCancel: () => void;
@@ -730,23 +728,26 @@ function TicketHeader({
   userRole: "admin" | "agent" | "user";
   userId: string;
 }) {
-  const navigate = useNavigate();
-
   return (
-    <div className="bg-card border rounded-lg p-6 mb-6">
+    <div className="bg-card border rounded-sm p-6 mb-6">
       {/* Navigation and Actions */}
-      <div className="flex items-center justify-between mb-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate("/tickets")}
-          className="flex items-center space-x-2 text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeftIcon className="w-4 h-4" />
-          <span>Back to Tickets</span>
-        </Button>
-
-        <div className="flex items-center space-x-2">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex gap-4 items-center">
+          <Link
+            to="/"
+            className="cursor-pointer hover:bg-muted p-2 rounded-lg transition-colors"
+            title="Back to dashboard"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <h1 className="text-2xl font-bold text-foreground break-words">
+            {ticket.title}
+          </h1>
+          <span className="items-center">
+            <StatusBadge status={ticket.status} />
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
           {/* Status Update */}
           {canEdit && !isEditing && (
             <StatusUpdateDialog
@@ -773,7 +774,11 @@ function TicketHeader({
                     <XIcon className="w-4 h-4 mr-2" />
                     Cancel
                   </Button>
-                  <Button size="sm" onClick={onSave} disabled={isSubmitting}>
+                  <Button
+                    size="sm"
+                    onClick={onSave}
+                    disabled={isSubmitting || !hasChanges}
+                  >
                     <SaveIcon className="w-4 h-4 mr-2" />
                     {isSubmitting ? "Saving..." : "Save Changes"}
                   </Button>
@@ -790,46 +795,26 @@ function TicketHeader({
       </div>
 
       {/* Ticket Title and Metadata */}
-      <div className="space-y-3">
+      <div className="space-y-3 space-x-3">
         <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            <h1 className="text-3xl font-bold text-foreground mb-2 break-words">
-              {ticket.title}
-            </h1>
-            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+          <div className="flex-1 px-6">
+            <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <span className="flex items-center space-x-1">
                 <span className="font-medium">ID:</span>
                 <code className="bg-muted px-2 py-1 rounded text-xs">
                   {ticket.id?.slice(-8)}
                 </code>
               </span>
-              <span className="flex items-center space-x-1">
-                <Calendar className="w-4 h-4" />
-                <span>Created {formatDate(ticket.created_at)}</span>
+              <span className="flex items-center gap-2">
+                <span>Priority:</span>
+                <PriorityBadge priority={ticket.priority} />{" "}
               </span>
-              {ticket.updated_at && ticket.updated_at !== ticket.created_at && (
-                <span className="flex items-center space-x-1">
-                  <span>Updated {formatDate(ticket.updated_at)}</span>
-                </span>
-              )}
             </div>
-          </div>
-
-          {/* Status Badge */}
-          <div className="flex-shrink-0 ml-4">
-            <StatusBadge status={ticket.status} />
           </div>
         </div>
 
         {/* Priority and Assignment Info */}
-        <div className="flex items-center space-x-6 pt-2 border-t">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-muted-foreground">
-              Priority:
-            </span>
-            <PriorityBadge priority={ticket.priority} />
-          </div>
-
+        <div className="flex items-center px-6 pt-2 border-t">
           {ticket.assigned_to && (
             <div className="flex items-center space-x-2">
               <UserIcon className="w-4 h-4 text-muted-foreground" />
@@ -842,7 +827,7 @@ function TicketHeader({
             </div>
           )}
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center px-6 gap-2">
             <UserIcon className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm font-medium text-muted-foreground">
               Created by:
@@ -1069,10 +1054,10 @@ export default function TicketDetailsPage() {
   const submit = useSubmit();
   const navigation = useNavigation();
 
-  const { ticket, comments, attachments, assignableUsers, error } = loaderData;
+  const { ticket, comments, attachments, assignableUsers } = loaderData;
   const isSubmitting = navigation.state === "submitting";
-
-  // State
+  const { toasts, removeToast, success, error } = useToast();
+  const [hasChanges, setHasChanges] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<EditTicketData>({
     title: ticket.title || "",
@@ -1161,35 +1146,34 @@ export default function TicketDetailsPage() {
     }
   }, [actionData]);
 
-  if (error) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 mx-auto mb-4 text-destructive" />
-          <h1 className="text-2xl font-bold mb-2">Error Loading Ticket</h1>
-          <p className="text-muted-foreground mb-4">{error}</p>
-          <Button onClick={() => window.location.reload()}>Try Again</Button>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    const changed =
+      editData.title !== ticket.title ||
+      editData.description !== ticket.description ||
+      editData.priority !== ticket.priority ||
+      editData.assigned_to !== ticket.assigned_to ||
+      (editData.attachments?.length ?? 0) > 0;
+
+    setHasChanges(changed);
+  }, [editData, ticket]);
+
+  useEffect(() => {
+    if (actionData?.success) {
+      success(actionData.message);
+      setIsEditing(false);
+    } else if (actionData?.success === false) {
+      error(actionData.message);
+    }
+  }, [actionData]);
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-7xl">
-      {/* Action Data Messages */}
-      {actionData && (
-        <div
-          className={`mb-4 p-4 rounded-lg ${actionData.success ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800"}`}
-        >
-          {actionData.message}
-        </div>
-      )}
-
+    <div className="container mx-auto px-4 py-6">
       <TicketHeader
         ticket={ticket}
         isEditing={isEditing}
         canEdit={canEdit}
         isSubmitting={isSubmitting}
+        hasChanges={hasChanges}
         onEdit={() => setIsEditing(true)}
         onSave={handleSaveTicket}
         onCancel={() => setIsEditing(false)}
@@ -1199,7 +1183,7 @@ export default function TicketDetailsPage() {
       />
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
         {/* Main Content - Takes up 3 columns */}
         <div className="xl:col-span-3 space-y-6">
           {/* Ticket Description */}
@@ -1254,8 +1238,7 @@ export default function TicketDetailsPage() {
               {/* Comments List */}
               <div className="space-y-4">
                 {(comments || []).length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <MessageCircleIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <div className="text-center py-2 text-muted-foreground">
                     <p>No comments yet. Be the first to add one!</p>
                   </div>
                 ) : (
@@ -1333,8 +1316,8 @@ export default function TicketDetailsPage() {
                           type="radio"
                           id="internal_note"
                           name="commentType"
-                          value="internal"
-                          checked={commentType === "internal"}
+                          value="internal_note"
+                          checked={commentType === "internal_note"}
                           onChange={(e) =>
                             setCommentType(e.target.value as CommentType)
                           }
@@ -1357,43 +1340,43 @@ export default function TicketDetailsPage() {
         </div>
 
         {/* Sidebar - Takes up 1 column */}
-        <div className="xl:col-span-1 space-y-6">
+        <div className="xl:col-span-2 space-y-6">
           {/* Ticket Information */}
           <Card>
             <CardHeader>
               <CardTitle>Ticket Information</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium text-muted-foreground">
-                  Status
-                </Label>
-                <div className="mt-1">
+            <CardContent className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex gap-3">
+                  <Label className="text-sm font-medium text-muted-foreground">
+                    Status
+                  </Label>
                   <StatusBadge status={ticket.status} />
                 </div>
-              </div>
-              <div>
-                <Label className="text-sm font-medium text-muted-foreground">
-                  Priority
-                </Label>
-                <div className="mt-1">
+                <div className="flex gap-3">
+                  <Label className="text-sm font-medium text-muted-foreground">
+                    Priority
+                  </Label>
                   <PriorityBadge priority={ticket.priority} />
                 </div>
               </div>
-              <div>
-                <Label className="text-sm font-medium text-muted-foreground">
-                  Created
-                </Label>
-                <p className="text-sm">{formatDate(ticket.created_at)}</p>
-              </div>
-              {ticket.updated_at && (
+              <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">
-                    Last Updated
+                    Created
                   </Label>
-                  <p className="text-sm">{formatDate(ticket.updated_at)}</p>
+                  <p className="text-sm">{formatDate(ticket.created_at)}</p>
                 </div>
-              )}
+                {ticket.updated_at && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">
+                      Last Updated
+                    </Label>
+                    <p className="text-sm">{formatDate(ticket.updated_at)}</p>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -1494,6 +1477,7 @@ export default function TicketDetailsPage() {
           )}
         </div>
       </div>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

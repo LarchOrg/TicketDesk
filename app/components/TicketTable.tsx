@@ -2,6 +2,7 @@ import {
   ArrowUpDown,
   ChevronDown,
   ChevronUp,
+  Download,
   Edit,
   Eye,
   Filter,
@@ -13,6 +14,7 @@ import type { Ticket } from "../lib/types";
 import { formatDate, getShortId } from "../lib/utils";
 import PriorityBadge from "./PriorityBadge";
 import StatusBadge from "./StatusBadge";
+import { useToast } from "./Toast";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import {
@@ -44,6 +46,9 @@ interface TicketTableProps {
   onTicketClick?: (ticket: Ticket) => void;
   onEdit?: (ticket: Ticket) => void;
   onDelete?: (ticket: Ticket) => void;
+  onBulkDelete?: (ticketIds: string[]) => void;
+  canDelete?: boolean;
+  userRole?: string;
   loading?: boolean;
   className?: string;
 }
@@ -55,12 +60,16 @@ export default function TicketTable({
   onTicketClick,
   onEdit,
   onDelete,
+  onBulkDelete,
+  canDelete = false,
+  userRole = "user",
   loading = false,
   className = "",
 }: TicketTableProps) {
   const [sortColumn, setSortColumn] = useState<keyof Ticket | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [selectedTickets, setSelectedTickets] = useState<string[]>([]);
+  const { toasts, removeToast, success, error, info, warning } = useToast();
 
   const columns: Column[] = [
     {
@@ -69,7 +78,7 @@ export default function TicketTable({
       sortable: true,
       render: (value, _ticket) => (
         <div className="min-w-0 max-w-xs">
-          <p className="font-medium text-foreground truncate">{value}</p>
+          <p className="font-medium text-blue-700 truncate">{value}</p>
         </div>
       ),
     },
@@ -106,16 +115,31 @@ export default function TicketTable({
       ),
     },
     {
-      key: "created_by",
+      key: "created_by_profile",
       label: "Creator",
       sortable: true,
       render: (value, _ticket) => (
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-xs font-medium">
-            {value?.charAt(0)?.toUpperCase() || "U"}
+            {value.name?.charAt(0)?.toUpperCase() || "U"}
           </div>
           <span className="text-sm text-muted-foreground truncate max-w-24">
-            {value || "Unknown"}
+            {value.name || "Unknown"}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "assigned_to_profile",
+      label: "Assignee",
+      sortable: true,
+      render: (value, _ticket) => (
+        <div className="flex items-center space-x-2">
+          <div className="w-8 h-8 bg-blue-800 rounded-full flex items-center justify-center text-primary-foreground text-xs font-medium">
+            {value.name?.charAt(0)?.toUpperCase() || "U"}
+          </div>
+          <span className="text-sm text-muted-foreground truncate max-w-24">
+            {value.name || "Unknown"}
           </span>
         </div>
       ),
@@ -156,13 +180,17 @@ export default function TicketTable({
                 Edit
               </DropdownMenuItem>
             )}
-            {onDelete && (
+            {onDelete && canDelete && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete(_ticket);
+                    success(
+                      "Ticket Deleted",
+                      "The ticket was successfully deleted."
+                    );
                   }}
                   className="text-destructive focus:text-destructive"
                 >
@@ -257,45 +285,77 @@ export default function TicketTable({
   }
 
   return (
-    <div className={`space-y-4 ${className}`}>
-      {/* Table Header with Bulk Actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              checked={selectedTickets.length === tickets.length}
-              onCheckedChange={handleSelectAll}
-            />
-            <span className="text-sm text-muted-foreground">
-              {selectedTickets.length > 0
-                ? `${selectedTickets.length} selected`
-                : `${tickets.length} tickets`}
-            </span>
-          </div>
-        </div>
+    <div className={`${className}`}>
+      {userRole !== "user" && (
+        <div className="flex justify-end border-t p-3">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={selectedTickets.length === 0}
+                className="flex items-center"
+              >
+                <span>{selectedTickets.length} selected</span>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
 
-        {selectedTickets.length > 0 && (
-          <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm">
-              Bulk Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-            >
-              Delete Selected
-            </Button>
-          </div>
-        )}
-      </div>
+            <DropdownMenuContent align="end" className="w-44">
+              {canDelete && onBulkDelete && (
+                <DropdownMenuItem
+                  disabled={selectedTickets.length === 0}
+                  onClick={() => {
+                    console.log("🗑️ Delete rows:", selectedTickets);
+                    onBulkDelete(selectedTickets);
+                    success(
+                      "Tickets Deleted",
+                      `${selectedTickets.length} ticket(s) deleted successfully`
+                    );
+                  }}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Selected
+                </DropdownMenuItem>
+              )}
+
+              <DropdownMenuItem
+                disabled={selectedTickets.length === 0}
+                onClick={() => {
+                  console.log("📤 Export rows:", selectedTickets);
+                  success(
+                    "Export Successful",
+                    "The selected tickets were successfully exported."
+                  );
+                }}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export Selected
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
 
       {/* Table */}
-      <div className="rounded-md border">
+      <div className="rounded-sm">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">{/* Checkbox column */}</TableHead>
+            <TableRow className="border">
+              {userRole !== "user" && (
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={
+                      selectedTickets.length > 0 &&
+                      selectedTickets.length === tickets.length
+                    }
+                    onCheckedChange={handleSelectAll}
+                    aria-label="Select all tickets"
+                  />
+                </TableHead>
+              )}
+
               {columns.map((column) => (
                 <TableHead key={column.key} className={column.width}>
                   {column.sortable && column.key !== "actions" ? (
@@ -323,6 +383,7 @@ export default function TicketTable({
               ))}
             </TableRow>
           </TableHeader>
+
           <TableBody>
             {sortedTickets.map((ticket) => (
               <TableRow
@@ -333,17 +394,19 @@ export default function TicketTable({
                   selectedTickets.includes(ticket.id) ? "selected" : undefined
                 }
               >
-                <TableCell>
-                  <Checkbox
-                    checked={selectedTickets.includes(ticket.id)}
-                    onCheckedChange={(checked) => {
-                      handleSelectTicket(ticket.id, checked as boolean);
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </TableCell>
+                {userRole !== "user" && (
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedTickets.includes(ticket.id)}
+                      onCheckedChange={(checked) => {
+                        handleSelectTicket(ticket.id, checked as boolean);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </TableCell>
+                )}
                 {columns.map((column) => (
-                  <TableCell key={column.key}>
+                  <TableCell key={column.key} className="text-blue">
                     {column.render
                       ? column.render(
                           ticket[column.key as keyof Ticket],

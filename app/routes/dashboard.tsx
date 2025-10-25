@@ -263,14 +263,14 @@ function StatsCard({
   subtitle?: string;
 }) {
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className="hover:shadow-md transition-shadow rounded-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className={`h-4 w-4 ${color}`} />
+        <Icon className={`h-6 w-6 ${color}`} />
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>
-        {trend && (
+        {/* {trend && (
           <p
             className={`text-xs ${trend.isPositive ? "text-green-600" : "text-red-600"} flex items-center mt-1`}
           >
@@ -278,7 +278,7 @@ function StatsCard({
             {trend.isPositive ? "+" : ""}
             {trend.value}% from last month
           </p>
-        )}
+        )} */}
         {subtitle && (
           <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
         )}
@@ -744,7 +744,7 @@ export default function UnifiedDashboard({ loaderData }: Route.ComponentProps) {
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="p-3">
-            <h1 className="text-3xl font-bold tracking-tight">
+            <h1 className="text-2xl font-bold tracking-tight">
               {getDashboardTitle()}
             </h1>
             <p className="text-sm text-muted-foreground">

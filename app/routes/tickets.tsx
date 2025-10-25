@@ -1,4 +1,4 @@
-import { Grid, List } from "lucide-react";
+import { Grid, List, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   redirect,
@@ -54,7 +54,6 @@ interface TicketsActionData {
 }
 
 type ViewMode = "grid" | "list";
-type ActionType = "deleteTicket";
 
 // Constants
 const DEFAULT_FILTERS: TicketFilters = {
@@ -214,7 +213,7 @@ export async function action({
   }
 
   const formData = await request.formData();
-  const actionType = formData.get("actionType") as ActionType;
+  const actionType = formData.get("actionType");
   console.log(actionType, "Action type received");
 
   try {
@@ -316,6 +315,75 @@ export async function action({
         console.log("Ticket deleted successfully");
         return { success: true, message: "Ticket deleted successfully" };
       }
+      case "bulkDeleteTickets": {
+        const ticketIds = formData.getAll("ticketIds[]") as string[];
+        console.log("Bulk delete action called with IDs:", ticketIds);
+
+        if (!ticketIds || ticketIds.length === 0) {
+          return {
+            success: false,
+            message: "No tickets provided for deletion",
+            error: "Missing ticket IDs",
+          };
+        }
+
+        // 🔐 check auth and permissions (same as before)
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+
+        if (profileError) {
+          console.error("Error fetching profile:", profileError);
+          return {
+            success: false,
+            message: "Failed to verify permissions",
+            error: profileError.message,
+          };
+        }
+
+        const userRole = profile?.role as
+          | "admin"
+          | "agent"
+          | "user"
+          | undefined;
+        const permissions = userRole
+          ? ROLE_PERMISSIONS[userRole]
+          : ROLE_PERMISSIONS.user;
+
+        if (!permissions.canDeleteTickets) {
+          return {
+            success: false,
+            message: "Permission denied",
+            error: "You don't have permission to delete tickets",
+          };
+        }
+
+        // 🗑️ Perform delete for each ticket
+        const deleteResults = await Promise.all(
+          ticketIds.map(async (id) => {
+            const result = await services.tickets.deleteTicket(
+              id,
+              user.id,
+              userRole || "user"
+            );
+            return { id, success: result?.success, error: result?.error };
+          })
+        );
+
+        const failed = deleteResults.filter((r) => !r.success);
+        if (failed.length > 0) {
+          return {
+            success: false,
+            message: `${failed.length} of ${ticketIds.length} tickets failed to delete`,
+            error: failed.map((f) => f.error).join(", "),
+          };
+        }
+
+        console.log("✅ Bulk delete completed successfully");
+        return { success: true, message: "All tickets deleted successfully" };
+      }
 
       default:
         return {
@@ -373,17 +441,17 @@ function ViewModeToggle({
 // Component: Page Header
 function PageHeader({
   onCreateTicket,
-  viewMode,
-  onViewModeChange,
+  // viewMode,
+  // onViewModeChange,
 }: {
   onCreateTicket: () => void;
-  viewMode: ViewMode;
-  onViewModeChange: (mode: ViewMode) => void;
+  // viewMode: ViewMode;
+  // onViewModeChange: (mode: ViewMode) => void;
 }) {
   if (typeof window !== "undefined") {
     setTimeout(() => {
       const el = document.querySelector(
-        "h1.text-3xl.font-bold.text-foreground"
+        "h1.text-2xl.font-bold.text-foreground"
       );
       if (el) {
         el.textContent = "Ticket Queue";
@@ -392,17 +460,17 @@ function PageHeader({
   }
   return (
     <div className="flex items-center justify-between">
-      <div className="p-4">
-        <h1 className="text-3xl font-bold text-foreground">All Tickets</h1>
+      <div className="p-2">
+        <h1 className="text-2xl font-bold text-foreground">All Tickets</h1>
         <p className="text-muted-foreground">
           Manage and track all support tickets
         </p>
       </div>
       <div className="flex items-center space-x-4">
-        <ViewModeToggle
+        {/* <ViewModeToggle
           viewMode={viewMode}
           onViewModeChange={onViewModeChange}
-        />
+        /> */}
         <Button
           onClick={onCreateTicket}
           className="flex items-center space-x-2"
@@ -482,10 +550,38 @@ function FilterPanel({
   onDateRangeChange: (dateFrom?: string, dateTo?: string) => void;
   disabled?: boolean;
 }) {
+  const isFiltered =
+    filters.status ||
+    filters.priority ||
+    filters.search ||
+    filters.date_from ||
+    filters.date_to;
+  const handleClearFilters = () => {
+    onFilterChange({
+      status: undefined,
+      priority: undefined,
+    });
+    onSearchChange("");
+    onDateRangeChange(undefined, undefined);
+  };
+
   return (
-    <div className="w-full rounded-lg space-y-4 mb-6">
+    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 w-full px-5 py-4">
       {/* Header */}
-      <h2 className="text-base font-semibold">Filters</h2>
+      <div className="flex items-center gap-6">
+        <h2 className="text-lg font-semibold">Filters</h2>
+        {filters && isFiltered && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleClearFilters()}
+            className="px-2 py-1 h-8"
+          >
+            <X className="h-3 w-3" />
+            Clear filters
+          </Button>
+        )}
+      </div>
 
       {/* Filter Controls */}
       <div className="flex flex-wrap items-center gap-6">
@@ -496,7 +592,7 @@ function FilterPanel({
           </label>
           <Input
             type="text"
-            placeholder="Search tickets..."
+            placeholder="Search tickets by title..."
             value={filters.search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="w-64"
@@ -633,7 +729,7 @@ function ErrorDisplay({ error }: { error: string }) {
 function useTicketManagement() {
   const navigate = useNavigate();
   const submit = useSubmit();
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  // const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
   const handleCreateTicket = () => {
     navigate("/newtickets");
@@ -655,13 +751,21 @@ function useTicketManagement() {
     submit(formData, { method: "POST" });
   };
 
+  const handleBulkDeleteTickets = async (
+    ticketIds: string[]
+  ): Promise<void> => {
+    const formData = new FormData();
+    formData.append("actionType", "bulkDeleteTickets");
+    ticketIds.forEach((id) => formData.append("ticketIds[]", id));
+    submit(formData, { method: "POST" });
+  };
+
   return {
-    viewMode,
-    setViewMode,
     handleCreateTicket,
     handleTicketClick,
     handleEditTicket,
     handleDeleteTicket,
+    handleBulkDeleteTickets,
   };
 }
 
@@ -683,16 +787,16 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
     filters,
     error: loaderError,
   } = loaderData as TicketsLoaderData;
+  console.log(tickets);
 
   const navigate = useNavigate();
 
   const {
-    viewMode,
-    setViewMode,
     handleCreateTicket,
     handleTicketClick,
     handleEditTicket,
     handleDeleteTicket,
+    handleBulkDeleteTickets,
   } = useTicketManagement();
 
   // Check user permissions - get role from profile instead of user metadata
@@ -843,8 +947,8 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
           <div className="max-w-full mx-auto p-6">
             <PageHeader
               onCreateTicket={handleCreateTicket}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
+              // viewMode={viewMode}
+              // onViewModeChange={setViewMode}
             />
             <ErrorDisplay error={loaderError} />
           </div>
@@ -854,55 +958,51 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
       </>
     );
   }
+  console.log(filteredTickets);
 
   return (
     <>
       <div className="min-h-screen bg-background">
-        <div className="max-w-full mx-auto p-6">
-          <PageHeader
-            onCreateTicket={handleCreateTicket}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-          />
+        <div className="max-w-full mx-auto px-6 py-6 space-y-6">
+          <PageHeader onCreateTicket={handleCreateTicket} />
 
           <StatsGrid stats={stats} />
-
-          <FilterPanel
-            filters={{
-              ...filters,
-              search: localSearch,
-              date_from: localDateFrom,
-              date_to: localDateTo,
-            }}
-            onFilterChange={handleFilterChange}
-            onSearchChange={setLocalSearch}
-            onDateRangeChange={(dateFrom, dateTo) => {
-              setLocalDateFrom(dateFrom || "");
-              setLocalDateTo(dateTo || "");
-            }}
-            disabled={isLoading}
-          />
-
-          {/* Tickets Display */}
-          {isLoading ? (
-            <TicketListSkeleton />
-          ) : filteredTickets.length === 0 ? (
-            <EmptyState onCreateTicket={handleCreateTicket} />
-          ) : viewMode === "grid" ? (
-            <TicketsGrid
-              tickets={filteredTickets}
-              onTicketClick={handleTicketClick}
-              onDeleteTicket={handleDeleteTicket}
-              canDelete={canDelete}
+          <Card>
+            <FilterPanel
+              filters={{
+                ...filters,
+                search: localSearch,
+                date_from: localDateFrom,
+                date_to: localDateTo,
+              }}
+              onFilterChange={handleFilterChange}
+              onSearchChange={setLocalSearch}
+              onDateRangeChange={(dateFrom, dateTo) => {
+                setLocalDateFrom(dateFrom || "");
+                setLocalDateTo(dateTo || "");
+              }}
+              disabled={isLoading}
             />
-          ) : (
-            <TicketTable
-              tickets={filteredTickets}
-              onTicketClick={handleTicketClick}
-              onEdit={handleEditTicket}
-              onDelete={(ticket: Ticket) => handleDeleteTicket(ticket.id)}
-            />
-          )}
+
+            {/* Tickets Display */}
+            {isLoading ? (
+              <TicketListSkeleton />
+            ) : filteredTickets.length === 0 ? (
+              <EmptyState onCreateTicket={handleCreateTicket} />
+            ) : (
+              <TicketTable
+                tickets={filteredTickets}
+                onTicketClick={handleTicketClick}
+                onEdit={handleEditTicket}
+                onDelete={(ticket: Ticket) => handleDeleteTicket(ticket.id)}
+                onBulkDelete={(ticketIds: string[]) =>
+                  handleBulkDeleteTickets(ticketIds)
+                }
+                canDelete={canDelete}
+                userRole={userRole}
+              />
+            )}
+          </Card>
         </div>
       </div>
       <ToastContainer toasts={toasts} onRemove={removeToast} />

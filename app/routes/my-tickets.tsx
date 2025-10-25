@@ -407,7 +407,7 @@ export default function MyTickets({ loaderData }: Route.ComponentProps) {
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">My Tickets</h1>
+            <h1 className="text-2xl font-bold">My Tickets</h1>
             <p className="text-muted-foreground">
               View and manage your submitted support tickets (
               {filteredTickets.length} total)

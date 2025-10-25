@@ -81,21 +81,29 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
         className={`flex items-center justify-between border-b border-border h-18 ${isCollapsed ? "px-4" : "px-6"}`}
       >
         {isCollapsed ? (
-          // Show just the HelpDesk icon when collapsed - make it clickable to expand
+          // Show just the logo when collapsed - make it clickable to expand
           <button
             onClick={toggleSidebar}
             className="flex items-center justify-center w-full rounded-lg hover:bg-muted/50 transition-colors group cursor-pointer"
             title="Expand HelpDesk sidebar"
           >
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
-              <Ticket className="w-5 h-5 text-primary-foreground" />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+              <img
+                src="/larch.png"
+                alt="HelpDesk Logo"
+                className="w-8 h-8 object-contain"
+              />
             </div>
           </button>
         ) : (
           // Show full branding when expanded
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
-              <Ticket className="w-5 h-5 text-primary-foreground" />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm">
+              <img
+                src="/larch.png"
+                alt="HelpDesk Logo"
+                className="w-8 h-8 object-contain"
+              />
             </div>
 
             <div>

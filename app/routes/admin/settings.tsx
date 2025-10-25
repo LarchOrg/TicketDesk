@@ -443,7 +443,7 @@ export default function AdminSettings({
   return (
     <div className="container mx-auto px-4 py-2">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">System Settings</h1>
+        <h1 className="text-2xl font-bold">System Settings</h1>
         <p className="text-muted-foreground">
           Configure system-wide settings and preferences
         </p>

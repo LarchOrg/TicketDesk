@@ -78,7 +78,9 @@ function validatePasswordConfirmation(
   password: string,
   confirmPassword: string
 ): string | null {
-  // Component: Error Display
+  if (password !== confirmPassword) {
+    return "Passwords do not match";
+  }
   return null;
 }
 
@@ -228,7 +230,7 @@ function ProfileHeader({ user, profile }: { user: any; profile: any }) {
             {/* Name and Role */}
             <div className="space-y-2">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <h1 className="text-3xl font-bold text-foreground truncate">
+                <h1 className="text-2xl font-bold text-foreground truncate">
                   {profile?.name || user?.email?.split("@")[0] || "User"}
                 </h1>
                 <div
@@ -283,6 +285,7 @@ function ProfileForm({
   error,
   success,
   loading,
+  hasChanges,
   onSubmit,
   onChange,
 }: {
@@ -290,6 +293,7 @@ function ProfileForm({
   error: string;
   success: string;
   loading: boolean;
+  hasChanges: boolean;
   onSubmit: (e: React.FormEvent) => void;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
@@ -351,7 +355,7 @@ function ProfileForm({
           <div className="flex justify-end">
             <Button
               type="submit"
-              disabled={loading}
+              disabled={loading || !hasChanges}
               className="cursor-pointer px-6 transition-colors"
             >
               <Save className="w-4 h-4 mr-2" />
@@ -370,6 +374,7 @@ function PasswordChangeForm({
   error,
   success,
   loading,
+  hasChanges,
   onSubmit,
   onChange,
 }: {
@@ -377,6 +382,7 @@ function PasswordChangeForm({
   error: string;
   success: string;
   loading: boolean;
+  hasChanges: boolean;
   onSubmit: (e: React.FormEvent) => void;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
@@ -452,7 +458,7 @@ function PasswordChangeForm({
           <div className="flex justify-end">
             <Button
               type="submit"
-              disabled={loading}
+              disabled={loading || !hasChanges}
               className="cursor-pointer px-6 transition-colors"
             >
               <Lock className="w-4 h-4 mr-2" />
@@ -472,6 +478,11 @@ function useProfileForm() {
     name: "",
     email: "",
   });
+  const [initialData, setInitialData] = useState<ProfileFormData>({
+    name: "",
+    email: "",
+  });
+  const [hasChanges, setHasChanges] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -479,12 +490,19 @@ function useProfileForm() {
   // Initialize form data when profile loads
   useEffect(() => {
     if (profile && user) {
-      setFormData({
-        name: profile.name || "",
-        email: user.email || "",
-      });
+      const data = { name: profile.name || "", email: user.email || "" };
+      setFormData(data);
+      setInitialData(data); // store original snapshot
+      setHasChanges(false);
     }
   }, [profile, user]);
+
+  useEffect(() => {
+    const changed =
+      formData.name.trim() !== initialData.name.trim() ||
+      formData.email.trim() !== initialData.email.trim();
+    setHasChanges(changed);
+  }, [formData, initialData]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -498,6 +516,7 @@ function useProfileForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasChanges) return;
     setError("");
     setSuccess("");
 
@@ -525,8 +544,8 @@ function useProfileForm() {
       }
 
       setSuccess("Profile updated successfully!");
-
-      setSuccess("Profile updated successfully!");
+      setInitialData(formData);
+      setHasChanges(false);
     } catch (err: any) {
       console.error("Profile update error:", err);
       setError(err.message || "Failed to update profile");
@@ -540,12 +559,14 @@ function useProfileForm() {
     error,
     success,
     loading,
+    hasChanges,
     handleChange,
     handleSubmit,
   };
 }
 
 function usePasswordForm() {
+  const { user } = useAuth();
   const [formData, setFormData] = useState<PasswordFormData>({
     currentPassword: "",
     newPassword: "",
@@ -554,6 +575,12 @@ function usePasswordForm() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  useEffect(() => {
+    const changed = Object.values(formData).some((v) => v.trim() !== "");
+    setHasChanges(changed);
+  }, [formData]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -564,10 +591,19 @@ function usePasswordForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasChanges) return;
     setError("");
     setSuccess("");
 
-    // Validation
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: user?.email!,
+      password: formData.currentPassword,
+    });
+
+    if (signInError) {
+      setError("Incorrect current password. Please try again.");
+      return
+    }
     const currentPasswordError = validatePassword(formData.currentPassword);
     if (currentPasswordError) {
       setError("Current " + currentPasswordError.toLowerCase());
@@ -612,6 +648,7 @@ function usePasswordForm() {
         newPassword: "",
         confirmPassword: "",
       });
+      setHasChanges(false);
     } catch (err: any) {
       console.error("Password update error:", err);
       setError(err.message || "Failed to update password");
@@ -625,6 +662,7 @@ function usePasswordForm() {
     error,
     success,
     loading,
+    hasChanges,
     handleChange,
     handleSubmit,
   };
@@ -660,7 +698,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="container mx-auto px-4 py-8">
         <div className="space-y-8">
           {/* Page Header */}
           <div className="flex items-center gap-4">
@@ -672,7 +710,7 @@ export default function ProfilePage() {
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div>
-              <h1 className="text-3xl font-bold text-foreground">
+              <h1 className="text-2xl font-bold text-foreground">
                 Profile Settings
               </h1>
               <p className="text-muted-foreground mt-2">
@@ -690,6 +728,7 @@ export default function ProfilePage() {
             error={profileForm.error}
             success={profileForm.success}
             loading={profileForm.loading}
+            hasChanges={profileForm.hasChanges}
             onSubmit={profileForm.handleSubmit}
             onChange={profileForm.handleChange}
           />
@@ -700,6 +739,7 @@ export default function ProfilePage() {
             error={passwordForm.error}
             success={passwordForm.success}
             loading={passwordForm.loading}
+            hasChanges={passwordForm.hasChanges}
             onSubmit={passwordForm.handleSubmit}
             onChange={passwordForm.handleChange}
           />
