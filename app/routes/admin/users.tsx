@@ -5,13 +5,20 @@ import {
   Shield,
   Trash2,
   User,
+  UserIcon,
   UserPlus,
   Users,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { redirect, useNavigate, useRevalidator, useSubmit } from "react-router";
-// Remove the type import since it's causing issues
-// import type { Route } from "../+types/admin/users";
+import { useEffect, useState, useTransition } from "react";
+import { redirect, useNavigate, useSubmit } from "react-router";
+import { ToastContainer, useToast } from "~/components/Toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/dialog";
+import { Label } from "~/components/ui/label";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import {
@@ -46,6 +53,7 @@ import { getRoleColor, getRoleDisplayName } from "../../lib/role-utils";
 import { createSupabaseServerClient } from "../../lib/supabase-server";
 import type { Profile } from "../../lib/types";
 import { createServices } from "../../services";
+import type { Route } from "../admin/+types/users";
 
 interface AdminUsersLoaderData {
   users: Profile[];
@@ -146,6 +154,47 @@ export async function action({
     const services = createServices(supabase);
 
     switch (actionType) {
+      case "createUser": {
+        const name = formData.get("name") as string;
+        const email = formData.get("email") as string;
+        const role = formData.get("role") as string;
+
+        const services = createServices(supabase);
+
+        const { data: authData, error: authError } = await supabase.auth.signUp(
+          {
+            email,
+            password: "Larch123",
+            options: {
+              data: {
+                name,
+                role,
+              },
+            },
+          }
+        );
+
+        if (authError || !authData.user) {
+          console.error("Error creating auth user:", authError);
+          return { error: authError?.message || "Failed to create auth user" };
+        }
+
+        const userId = authData.user.id;
+
+        const result = await services.users.createUserProfile({
+          id: userId,
+          name,
+          email,
+          role,
+        });
+
+        if (result?.success) {
+          return { success: true, message: "User created successfully" };
+        } else {
+          return { error: result?.error || "Failed to create user profile" };
+        }
+      }
+
       case "updateRole": {
         const newRole = formData.get("role") as string;
         const result = await services.users.updateUserProfile(userId, {
@@ -213,16 +262,68 @@ function UserRoleBadge({ role }: { role: string }) {
     </Badge>
   );
 }
+interface UserActionsMenuProps {
+  user: Profile;
+  currentUserRole?: string;
+  onUpdateRole: (userId: string, role: string) => void;
+  onDeleteUser: (userId: string) => void;
+}
 
-function UserActionsMenu({
+export function UserActionsMenu({
   user,
   onUpdateRole,
   onDeleteUser,
-}: {
-  user: Profile;
-  onUpdateRole: (userId: string, role: string) => void;
-  onDeleteUser: (userId: string) => void;
-}) {
+}: UserActionsMenuProps) {
+  const role = user.role;
+
+  const getRoleActions = () => {
+    switch (role) {
+      case "user":
+        return [
+          {
+            label: "Make Agent",
+            role: "agent",
+            icon: <Shield className="mr-2 h-4 w-4" />,
+          },
+          {
+            label: "Make Admin",
+            role: "admin",
+            icon: <Crown className="mr-2 h-4 w-4" />,
+          },
+        ];
+      case "agent":
+        return [
+          {
+            label: "Make Admin",
+            role: "admin",
+            icon: <Crown className="mr-2 h-4 w-4" />,
+          },
+          {
+            label: "Make User",
+            role: "user",
+            icon: <UserIcon className="mr-2 h-4 w-4" />,
+          },
+        ];
+      case "admin":
+        return [
+          {
+            label: "Make Agent",
+            role: "agent",
+            icon: <Shield className="mr-2 h-4 w-4" />,
+          },
+          {
+            label: "Make User",
+            role: "user",
+            icon: <UserIcon className="mr-2 h-4 w-4" />,
+          },
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const roleActions = getRoleActions();
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -230,19 +331,18 @@ function UserActionsMenu({
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
+
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => onUpdateRole(user.id, "admin")}>
-          <Crown className="mr-2 h-4 w-4" />
-          Make Admin
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onUpdateRole(user.id, "agent")}>
-          <Shield className="mr-2 h-4 w-4" />
-          Make Agent
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onUpdateRole(user.id, "user")}>
-          <User className="mr-2 h-4 w-4" />
-          Make User
-        </DropdownMenuItem>
+        {roleActions.map((action) => (
+          <DropdownMenuItem
+            key={action.role}
+            onClick={() => onUpdateRole(user.id, action.role)}
+          >
+            {action.icon}
+            {action.label}
+          </DropdownMenuItem>
+        ))}
+
         <DropdownMenuItem
           onClick={() => onDeleteUser(user.id)}
           className="text-destructive"
@@ -259,25 +359,38 @@ export default function AdminUsers({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
-  const { users, total, error } = loaderData;
+  const { users, total } = loaderData;
   const navigate = useNavigate();
   const submit = useSubmit();
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
-
-  const revalidator = useRevalidator();
+  const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const { toasts, removeToast, success, error } = useToast();
 
   useEffect(() => {
     if (actionData?.success) {
-      try {
-        revalidator.revalidate();
-      } catch (e) {
-        console.error("Failed to revalidate after action:", e);
-      }
+      success(actionData.message || "Success");
+    } else if (actionData?.error) {
+      error(actionData.error);
     }
-    // Only re-run when the success flag changes
-  }, [actionData?.success, revalidator]);
+  }, [actionData]);
 
+  const handleCreateUser = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+
+    startTransition(async () => {
+      const createForm = new FormData();
+      createForm.append("action", "createUser");
+      createForm.append("name", formData.get("name") as string);
+      createForm.append("email", formData.get("email") as string);
+      createForm.append("role", formData.get("role") as string);
+
+      submit(createForm, { method: "post" });
+      setOpen(false);
+    });
+  };
   const filteredUsers = users.filter((user: Profile) => {
     const q = searchTerm.toLowerCase();
     const matchesSearch =
@@ -314,13 +427,13 @@ export default function AdminUsers({
     }
   };
 
-  if (error) {
+  if (loaderData.error) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
           <Users className="mx-auto h-12 w-12 text-destructive mb-4" />
           <h1 className="text-2xl font-bold mb-2">Error Loading Users</h1>
-          <p className="text-muted-foreground mb-4">{error}</p>
+          <p className="text-muted-foreground mb-4">{loaderData.error}</p>
           <Button onClick={() => window.location.reload()}>Try Again</Button>
         </div>
       </div>
@@ -330,35 +443,23 @@ export default function AdminUsers({
   return (
     <div className="container mx-auto px-4 py-2">
       <div className="mb-8">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between py-4">
           <div>
             <h1 className="text-2xl font-bold">User Management</h1>
             <p className="text-muted-foreground">
               Manage users and their roles ({total} total users)
             </p>
           </div>
-          <Button onClick={() => navigate("/admin/users/new")}>
+          <Button onClick={() => setOpen(true)}>
             <UserPlus className="mr-2 h-4 w-4" />
             Add User
           </Button>
         </div>
       </div>
 
-      {/* Action Messages */}
-      {actionData?.success && (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <p className="text-green-800">{actionData.message}</p>
-        </div>
-      )}
-      {actionData?.error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-800">{actionData.error}</p>
-        </div>
-      )}
-
       {/* Filters */}
       <Card className="mb-6">
-        <CardContent className="p-4">
+        <CardContent>
           <div className="flex items-center space-x-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -412,7 +513,7 @@ export default function AdminUsers({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
+                {filteredUsers.map((user: Profile) => (
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">
                       {user.name || "N/A"}
@@ -445,6 +546,64 @@ export default function AdminUsers({
           )}
         </CardContent>
       </Card>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader className="mb-4">
+            <DialogTitle>Create New User</DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateUser} className="space-y-4">
+            <div className="space-y-4">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                name="name"
+                placeholder="Enter full name"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="Enter email"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="role">Role</Label>
+              <Select name="role" defaultValue="user">
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="agent">Agent</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isPending}>
+                {isPending ? "Creating..." : "Create User"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

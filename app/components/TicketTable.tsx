@@ -118,32 +118,39 @@ export default function TicketTable({
       key: "created_by_profile",
       label: "Creator",
       sortable: true,
-      render: (value, _ticket) => (
-        <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-xs font-medium">
-            {value.name?.charAt(0)?.toUpperCase() || "U"}
+      render: (value, _ticket) => {
+        const name = value?.name || "Unknown";
+        return (
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-xs font-medium">
+              {name.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-sm text-muted-foreground truncate max-w-24">
+              {name}
+            </span>
           </div>
-          <span className="text-sm text-muted-foreground truncate max-w-24">
-            {value.name || "Unknown"}
-          </span>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: "assigned_to_profile",
       label: "Assignee",
       sortable: true,
-      render: (value, _ticket) => (
-        <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-blue-800 rounded-full flex items-center justify-center text-primary-foreground text-xs font-medium">
-            {value.name?.charAt(0)?.toUpperCase() || "U"}
+      render: (value, _ticket) => {
+        const name = value?.name || "Unknown";
+        return (
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-blue-800 rounded-full flex items-center justify-center text-primary-foreground text-xs font-medium">
+              {name.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-sm text-muted-foreground truncate max-w-24">
+              {name}
+            </span>
           </div>
-          <span className="text-sm text-muted-foreground truncate max-w-24">
-            {value.name || "Unknown"}
-          </span>
-        </div>
-      ),
+        );
+      },
     },
+
     {
       key: "actions",
       label: "",

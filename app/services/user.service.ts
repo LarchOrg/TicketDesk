@@ -1,6 +1,12 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Profile } from "../lib/types";
 
+export function createAdminSupabaseClient(): SupabaseClient {
+  return createClient(
+    process.env.VITE_SUPABASE_URL as string,
+    process.env.VITE_SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 export function createUserService(supabase: SupabaseClient) {
   return {
     /**
@@ -112,7 +118,7 @@ export function createUserService(supabase: SupabaseClient) {
     }): Promise<{ success: boolean; profile?: Profile; error?: string }> {
       const { data, error } = await supabase
         .from("profiles")
-        .insert({
+        .upsert({
           id: profileData.id,
           name: profileData.name,
           email: profileData.email,
@@ -137,17 +143,29 @@ export function createUserService(supabase: SupabaseClient) {
     async deleteUserProfile(
       userId: string
     ): Promise<{ success: boolean; error?: string }> {
-      const { error } = await supabase
-        .from("profiles")
-        .delete()
-        .eq("id", userId);
+      try {
+        const supabaseAdmin = createAdminSupabaseClient();
 
-      if (error) {
-        console.error("Error deleting user profile:", error);
-        return { success: false, error: error.message };
+        // 1. Delete dependent custom tables
+        await supabaseAdmin
+          .from("notifications")
+          .delete()
+          .eq("user_id", userId);
+        await supabaseAdmin.from("profiles").delete().eq("id", userId);
+
+        // 2. Delete user from Supabase Auth
+        const { error: authError } =
+          await supabaseAdmin.auth.admin.deleteUser(userId);
+        if (authError) {
+          console.error("Error deleting auth user:", authError);
+          return { success: false, error: authError.message };
+        }
+
+        return { success: true };
+      } catch (err) {
+        console.error("Unexpected error deleting user:", err);
+        return { success: false, error: "Unexpected error" };
       }
-
-      return { success: true };
     },
 
     /**

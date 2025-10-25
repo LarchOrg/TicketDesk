@@ -958,7 +958,6 @@ export default function TicketsPage({ loaderData }: Route.ComponentProps) {
       </>
     );
   }
-  console.log(filteredTickets);
 
   return (
     <>

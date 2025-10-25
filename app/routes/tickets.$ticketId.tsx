@@ -1069,7 +1069,6 @@ export default function TicketDetailsPage() {
   const [newComment, setNewComment] = useState("");
   const [commentType, setCommentType] = useState<CommentType>("comment");
 
-  // Permissions - get role from profile instead of user metadata
   const userRole = profile?.role as "admin" | "agent" | "user" | undefined;
   const canEdit =
     user && userRole ? canUserEditTicket(userRole, user.id, ticket) : false;

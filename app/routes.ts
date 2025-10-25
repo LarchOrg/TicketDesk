@@ -27,7 +27,6 @@ export default [
   route("reports", "routes/reports.tsx"),
   route("analytics", "routes/analytics.tsx"),
 
-  // Admin routes - using proper React Router v7 structure
   route("admin/settings", "routes/admin/settings.tsx"),
   route("admin/users", "routes/admin/users.tsx"),
 ] satisfies RouteConfig;

@@ -22,7 +22,7 @@ function ToastItem({ toast, onRemove }: ToastProps) {
     const timer = setTimeout(() => {
       setIsVisible(false);
       setTimeout(() => onRemove(toast.id), 300);
-    }, toast.duration || 5000);
+    }, toast.duration || 4000);
 
     return () => clearTimeout(timer);
   }, [toast.id, toast.duration, onRemove]);
@@ -30,26 +30,26 @@ function ToastItem({ toast, onRemove }: ToastProps) {
   const getIcon = () => {
     switch (toast.type) {
       case "success":
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
+        return <CheckCircle className="w-5 h-5 text-green-600" />;
       case "error":
-        return <AlertCircle className="w-5 h-5 text-red-500" />;
+        return <AlertCircle className="w-5 h-5 text-red-600" />;
       case "warning":
-        return <AlertCircle className="w-5 h-5 text-yellow-500" />;
+        return <AlertCircle className="w-5 h-5 text-orange-500" />;
       case "info":
-        return <Info className="w-5 h-5 text-blue-500" />;
+        return <Info className="w-5 h-5 text-blue-600" />;
     }
   };
 
   const getBgColor = () => {
     switch (toast.type) {
       case "success":
-        return "bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800";
+        return "bg-green-100 border-l-4 border-green-600";
       case "error":
-        return "bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800";
+        return "bg-red-100 border-l-4 border-red-600";
       case "warning":
-        return "bg-yellow-50 border-yellow-200 dark:bg-yellow-950 dark:border-yellow-800";
+        return "bg-orange-100 border-l-4 border-orange-500";
       case "info":
-        return "bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800";
+        return "bg-blue-100 border-l-4 border-blue-600";
     }
   };
 
@@ -57,31 +57,29 @@ function ToastItem({ toast, onRemove }: ToastProps) {
     <div
       className={`
         ${getBgColor()}
-        border rounded-lg p-4 shadow-lg transition-all duration-300 transform
+        rounded-lg p-4 shadow-md transition-transform duration-300 transform
         ${isVisible ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"}
-        max-w-sm w-full
+        max-w-xs w-full
       `}
     >
       <div className="flex items-start space-x-3">
         {getIcon()}
         <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-medium text-foreground">{toast.title}</h4>
+          <h4 className="text-sm font-semibold text-gray-800">{toast.title}</h4>
           {toast.message && (
-            <p className="text-sm text-muted-foreground mt-1">
-              {toast.message}
-            </p>
+            <p className="text-sm text-gray-600 mt-1">{toast.message}</p>
           )}
         </div>
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 w-6 p-0 hover:bg-transparent"
+          className="h-6 w-6 p-0 hover:bg-gray-200 dark:hover:bg-gray-700"
           onClick={() => {
             setIsVisible(false);
             setTimeout(() => onRemove(toast.id), 300);
           }}
         >
-          <X className="w-4 h-4" />
+          <X className="w-4 h-4 text-gray-600" />
         </Button>
       </div>
     </div>
@@ -95,7 +93,7 @@ interface ToastContainerProps {
 
 export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
   return (
-    <div className="fixed top-4 right-4 z-50 space-y-2">
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col-reverse space-y-2 space-y-reverse">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={onRemove} />
       ))}
