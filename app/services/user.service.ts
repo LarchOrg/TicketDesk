@@ -143,17 +143,8 @@ export function createUserService(supabase: SupabaseClient) {
     async deleteUserProfile(
       userId: string
     ): Promise<{ success: boolean; error?: string }> {
+      const supabaseAdmin = createAdminSupabaseClient();
       try {
-        const supabaseAdmin = createAdminSupabaseClient();
-
-        // 1. Delete dependent custom tables
-        await supabaseAdmin
-          .from("notifications")
-          .delete()
-          .eq("user_id", userId);
-        await supabaseAdmin.from("profiles").delete().eq("id", userId);
-
-        // 2. Delete user from Supabase Auth
         const { error: authError } =
           await supabaseAdmin.auth.admin.deleteUser(userId);
         if (authError) {
@@ -161,10 +152,12 @@ export function createUserService(supabase: SupabaseClient) {
           return { success: false, error: authError.message };
         }
 
+        await supabaseAdmin.from("profiles").delete().eq("id", userId);
+
         return { success: true };
-      } catch (err) {
+      } catch (err: any) {
         console.error("Unexpected error deleting user:", err);
-        return { success: false, error: "Unexpected error" };
+        return { success: false, error: err.message };
       }
     },
 
