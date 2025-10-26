@@ -13,6 +13,7 @@ import {
 import { Link, useLocation } from "react-router";
 import { useAuth } from "~/contexts/AuthContext";
 import { useSidebar } from "~/contexts/SidebarContext";
+import { useTheme } from "~/contexts/ThemeContext";
 
 const navigation = [
   {
@@ -36,7 +37,7 @@ const navigation = [
 ];
 
 const secondaryNavigation = [
-  { name: "Team", href: "admin/users", icon: Users, roles: ["admin"] },
+  { name: "Team", href: "/admin/users", icon: Users, roles: ["admin"] },
   {
     name: "Analytics",
     href: "/analytics",
@@ -45,7 +46,7 @@ const secondaryNavigation = [
   },
   {
     name: "Settings",
-    href: "admin/settings",
+    href: "/admin/settings",
     icon: Settings,
     roles: ["admin"],
   },
@@ -60,6 +61,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
   const { sidebarOpen, toggleSidebar } = useSidebar();
   const location = useLocation();
   const role = profile?.role || "user";
+  const { darkMode } = useTheme();
 
   // Use the collapsed prop if provided, otherwise use the global state
   const isCollapsed = collapsed !== undefined ? collapsed : !sidebarOpen;
@@ -73,36 +75,37 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
   const visibleSecondary = secondaryNavigation.filter((item) =>
     item.roles.includes(role)
   );
+  const logoSrc = darkMode === true ? "/dark_larch.jpg" : "/larch.png";
 
   return (
     <div className="flex flex-col h-full bg-card border-r border-border">
       {/* Header / Logo */}
       <div
-        className={`flex items-center justify-between border-b border-border h-18 ${isCollapsed ? "px-4" : "px-6"}`}
+        className={`flex items-center justify-between border-b border-border h-18 ${isCollapsed ? "px-2" : "px-6"}`}
       >
         {isCollapsed ? (
           // Show just the logo when collapsed - make it clickable to expand
           <button
             onClick={toggleSidebar}
-            className="flex items-center justify-center w-full rounded-lg hover:bg-muted/50 transition-colors group cursor-pointer"
+            className="flex items-center justify-center w-full rounded-lg transition-colors group cursor-pointer"
             title="Expand HelpDesk sidebar"
           >
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+            <div className="w-12 h-12 flex items-center justify-center transition-shadow">
               <img
-                src="/larch.png"
+                src={logoSrc}
                 alt="HelpDesk Logo"
-                className="w-8 h-8 object-contain"
+                className="w-12 h-12 object-contain"
               />
             </div>
           </button>
         ) : (
           // Show full branding when expanded
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm">
+            <div className="w-12 h-12 rounded-lg flex items-center justify-center">
               <img
-                src="/larch.png"
+                src={logoSrc}
                 alt="HelpDesk Logo"
-                className="w-8 h-8 object-contain"
+                className="w-12 h-12 object-contain"
               />
             </div>
 
@@ -110,8 +113,8 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
               <h1 className="text-lg font-bold text-foreground leading-tight">
                 HelpDesk
               </h1>
-              <p className="text-xs text-muted-foreground leading-tight">
-                Support System
+              <p className="text-xs text-muted-foreground leading-tight mt-1">
+                Larch Support System
               </p>
             </div>
           </div>

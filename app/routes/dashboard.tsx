@@ -747,7 +747,7 @@ export default function UnifiedDashboard({ loaderData }: Route.ComponentProps) {
             <h1 className="text-2xl font-bold tracking-tight">
               {getDashboardTitle()}
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground">
               {role === "admin" && "System overview and management"}
               {role === "agent" && "Manage and track your assigned tickets"}
               {role === "user" && "Track your support requests"}

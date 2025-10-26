@@ -64,7 +64,7 @@ interface AdminSettingsActionData {
 
 // Default settings
 const DEFAULT_SETTINGS: SystemSettings = {
-  siteName: "Support Portal",
+  siteName: "Larch HelpDesk",
   siteDescription: "Customer Support and Ticket Management System",
   supportEmail: "support@company.com",
   autoAssignment: false,
@@ -200,7 +200,7 @@ function GeneralSettings({ settings }: { settings: SystemSettings }) {
               id="siteName"
               name="siteName"
               defaultValue={settings.siteName}
-              placeholder="Support Portal"
+              placeholder="Larch HelpDesk"
             />
           </div>
           <div>

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { redirect, useNavigate, useSubmit } from "react-router";
+import { ConfirmDialog } from "~/components/ConfirmationModal";
 import { ToastContainer, useToast } from "~/components/Toast";
 import {
   Dialog,
@@ -152,6 +153,7 @@ export async function action({
     const userId = formData.get("userId") as string;
 
     const services = createServices(supabase);
+    console.log("first actionType:", actionType, "userId:", userId);
 
     switch (actionType) {
       case "createUser": {
@@ -367,7 +369,14 @@ export default function AdminUsers({
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { toasts, removeToast, success, error } = useToast();
-
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmData, setConfirmData] = useState<{
+    action: "updateRole" | "deleteUser" | null;
+    userId?: string;
+    role?: string;
+    title?: string;
+    description?: string;
+  }>({ action: null });
   useEffect(() => {
     if (actionData?.success) {
       success(actionData.message || "Success");
@@ -401,30 +410,25 @@ export default function AdminUsers({
   });
 
   const handleUpdateRole = (userId: string, role: string) => {
-    if (
-      confirm(
-        `Are you sure you want to change this user's role to ${getRoleDisplayName(role as any)}?`
-      )
-    ) {
-      const formData = new FormData();
-      formData.append("action", "updateRole");
-      formData.append("userId", userId);
-      formData.append("role", role);
-      submit(formData, { method: "post" });
-    }
+    setConfirmData({
+      action: "updateRole",
+      userId,
+      role,
+      title: "Change User Role",
+      description: `Are you sure you want to change this user's role to ${getRoleDisplayName(role as any)}?`,
+    });
+    setConfirmOpen(true);
   };
 
   const handleDeleteUser = (userId: string) => {
-    if (
-      confirm(
-        "Are you sure you want to delete this user? This action cannot be undone."
-      )
-    ) {
-      const formData = new FormData();
-      formData.append("action", "deleteUser");
-      formData.append("userId", userId);
-      submit(formData, { method: "post" });
-    }
+    setConfirmData({
+      action: "deleteUser",
+      userId,
+      title: "Delete User",
+      description:
+        "Are you sure you want to delete this user? This action cannot be undone.",
+    });
+    setConfirmOpen(true);
   };
 
   if (loaderData.error) {
@@ -442,8 +446,8 @@ export default function AdminUsers({
 
   return (
     <div className="container mx-auto px-4 py-2">
-      <div className="mb-8">
-        <div className="flex items-center justify-between py-4">
+      <div className="mb-4">
+        <div className="flex items-center justify-between py-4 px-2">
           <div>
             <h1 className="text-2xl font-bold">User Management</h1>
             <p className="text-muted-foreground">
@@ -604,6 +608,27 @@ export default function AdminUsers({
         </DialogContent>
       </Dialog>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      <ConfirmDialog
+        open={confirmOpen}
+        title={confirmData.title || ""}
+        description={confirmData.description || ""}
+        destructive={confirmData.action === "deleteUser"}
+        onCancel={() => {
+          setConfirmOpen(false);
+          setConfirmData({ action: null });
+        }}
+        onConfirm={() => {
+          if (!confirmData.userId || !confirmData.action) return;
+          const formData = new FormData();
+          formData.append("action", confirmData.action);
+          formData.append("userId", confirmData.userId);
+          if (confirmData.action === "updateRole" && confirmData.role) {
+            formData.append("role", confirmData.role);
+          }
+          submit(formData, { method: "post" });
+          setConfirmOpen(false);
+        }}
+      />
     </div>
   );
 }
