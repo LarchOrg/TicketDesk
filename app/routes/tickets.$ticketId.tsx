@@ -19,7 +19,9 @@ import {
 import { useEffect, useState } from "react";
 import {
   Link,
+  redirect,
   useActionData,
+  useFetcher,
   useLoaderData,
   useNavigation,
   useSubmit,
@@ -64,6 +66,8 @@ import {
 } from "~/lib/utils";
 import { createServices } from "~/services";
 import type { Route } from "./+types/tickets.$ticketId";
+import { ConfirmDialog } from "~/components/ConfirmationModal";
+import { RichTextEditor } from "~/components/RichTextEditor";
 
 // Types
 interface TicketDetailsLoaderData {
@@ -86,6 +90,7 @@ interface EditTicketData {
   priority: TicketPriority;
   assigned_to: string | undefined;
   attachments?: File[];
+  delete_attachment_ids?: [];
 }
 
 type CommentType = "comment" | "internal_note";
@@ -194,12 +199,20 @@ export async function action({
   params,
   request,
 }: Route.ActionArgs): Promise<TicketDetailsActionData> {
-  const { supabase } = createSupabaseServerClient(request);
+  const { supabase, response } = createSupabaseServerClient(request);
   const services = createServices(supabase);
   const ticketId = params.ticketId;
 
   if (!ticketId) {
     throw new Response("Ticket ID is required", { status: 400 });
+  }
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    throw redirect("/login", { headers: response.headers });
   }
 
   const formData = await request.formData();
@@ -208,11 +221,23 @@ export async function action({
   try {
     switch (actionType) {
       case "updateTicket": {
+        console.log("Coming here");
         const title = formData.get("title") as string;
         const description = formData.get("description") as string;
         const priority = formData.get("priority") as TicketPriority;
         const assigned_to = formData.get("assigned_to") as string | null;
         const status = formData.get("status") as TicketStatus | null;
+
+        const attachments: File[] = [];
+        for (const [key, value] of formData.entries()) {
+          if (key.startsWith("attachment_") && value instanceof File) {
+            // Only add files that have content (size > 0)
+            if (value.size > 0) {
+              attachments.push(value);
+            }
+          }
+        }
+        console.log(formData);
 
         await services.tickets.updateTicket(ticketId, {
           title,
@@ -221,6 +246,33 @@ export async function action({
           assigned_to,
           ...(status ? { status } : {}),
         });
+
+        const deleteIds = formData.getAll("delete_attachment_ids") as string[];
+        if (deleteIds && deleteIds.length > 0) {
+          console.log("Deleting attachments:", deleteIds);
+          for (const id of deleteIds) {
+            const deleteResult =
+              await services.attachments.deleteAttachment(id);
+            if (!deleteResult.success) {
+              console.error("Failed to delete attachment:", deleteResult.error);
+            }
+          }
+        }
+
+        if (attachments && attachments.length > 0) {
+          for (const file of attachments) {
+            console.log(file);
+            const uploadResult = await services.attachments.uploadAttachment(
+              ticketId,
+              file,
+              user.id
+            );
+
+            if (!uploadResult.success) {
+              console.error("Failed to upload attachment:", uploadResult.error);
+            }
+          }
+        }
 
         return { success: true, message: "Ticket updated successfully" };
       }
@@ -707,6 +759,7 @@ function TicketHeader({
   ticket,
   isEditing,
   canEdit,
+  isSaving,
   isSubmitting,
   hasChanges,
   onEdit,
@@ -719,6 +772,7 @@ function TicketHeader({
   ticket: Ticket;
   isEditing: boolean;
   canEdit: boolean;
+  isSaving: boolean;
   isSubmitting: boolean;
   hasChanges: boolean;
   onEdit: () => void;
@@ -732,7 +786,7 @@ function TicketHeader({
     <div className="bg-card border rounded-sm p-6 mb-6">
       {/* Navigation and Actions */}
       <div className="flex items-center justify-between mb-6">
-        <div className="flex gap-4 items-center">
+        <div className="flex gap-4 items-center mr-4">
           <Link
             to="/"
             className="cursor-pointer hover:bg-muted p-2 rounded-lg transition-colors"
@@ -761,7 +815,7 @@ function TicketHeader({
           )}
 
           {/* Edit Controls */}
-          {canEdit && (
+          {canEdit && ticket.status !== "closed" && (
             <>
               {isEditing ? (
                 <>
@@ -769,7 +823,7 @@ function TicketHeader({
                     variant="outline"
                     size="sm"
                     onClick={onCancel}
-                    disabled={isSubmitting}
+                    disabled={isSaving}
                   >
                     <XIcon className="w-4 h-4 mr-2" />
                     Cancel
@@ -777,10 +831,10 @@ function TicketHeader({
                   <Button
                     size="sm"
                     onClick={onSave}
-                    disabled={isSubmitting || !hasChanges}
+                    disabled={isSaving || !hasChanges}
                   >
                     <SaveIcon className="w-4 h-4 mr-2" />
-                    {isSubmitting ? "Saving..." : "Save Changes"}
+                    {isSaving ? "Saving..." : "Save Changes"}
                   </Button>
                 </>
               ) : (
@@ -887,15 +941,13 @@ function TicketEditForm({
 
       {/* Description */}
       <div className="space-y-2">
-        <Label htmlFor="edit-description" className="text-base font-semibold">
+        <Label htmlFor="description" className="text-base font-semibold">
           Description <span className="text-destructive">*</span>
         </Label>
-        <Textarea
-          id="edit-description"
+        <RichTextEditor
           value={editData.description}
-          onChange={(e) => onChange({ description: e.target.value })}
-          placeholder="Describe the issue or request..."
-          rows={6}
+          onChange={(value) => onChange({ description: value })}
+          placeholder="Provide detailed information about the issue. Include steps to reproduce, expected behavior, and any error messages..."
         />
       </div>
 
@@ -903,13 +955,13 @@ function TicketEditForm({
       <div className="space-y-2">
         <Label className="text-base font-semibold">Priority</Label>
         <Select
-          value={editData.priority}
+          value={editData.priority || "medium"}
           onValueChange={(value) =>
             onChange({ priority: value as TicketPriority })
           }
         >
           <SelectTrigger>
-            <SelectValue />
+            <SelectValue placeholder="Select priority" />
           </SelectTrigger>
           <SelectContent>
             {PRIORITY_OPTIONS.map((option) => (
@@ -929,7 +981,7 @@ function TicketEditForm({
         <div className="space-y-2">
           <Label className="text-base font-semibold">Assign To</Label>
           <Select
-            value={editData.assigned_to || ""}
+            value={editData.assigned_to || "unassigned"}
             onValueChange={(value) =>
               onChange({ assigned_to: value || undefined })
             }
@@ -938,7 +990,7 @@ function TicketEditForm({
               <SelectValue placeholder="Select assignee" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Unassigned</SelectItem>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
               {assignableUsers.map((user) => (
                 <SelectItem key={user.id} value={user.id}>
                   {user.name}
@@ -1053,7 +1105,11 @@ export default function TicketDetailsPage() {
   const { user, profile } = auth;
   const submit = useSubmit();
   const navigation = useNavigation();
-
+  const fetcher = useFetcher();
+  const isSaving = fetcher.state === "submitting";
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(
+    null
+  );
   const { ticket, comments, attachments, assignableUsers } = loaderData;
   const isSubmitting = navigation.state === "submitting";
   const { toasts, removeToast, success, error } = useToast();
@@ -1065,6 +1121,7 @@ export default function TicketDetailsPage() {
     priority: ticket.priority || "medium",
     assigned_to: ticket.assigned_to || undefined,
     attachments: [],
+    delete_attachment_ids: [],
   });
   const [newComment, setNewComment] = useState("");
   const [commentType, setCommentType] = useState<CommentType>("comment");
@@ -1077,8 +1134,13 @@ export default function TicketDetailsPage() {
     : ROLE_PERMISSIONS.user;
   const canAssign = permissions.canAssignTickets || false;
   const existingAttachments = attachments.filter((a) => a.id);
+  const [deletedAttachments, setDeletedAttachments] = useState<string[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    attachmentId: string | null;
+  }>({ open: false, attachmentId: null });
 
-  const handleSaveTicket = () => {
+  const handleSaveTicket = async () => {
     const formData = new FormData();
     formData.append("actionType", "updateTicket");
     formData.append("title", editData.title);
@@ -1087,13 +1149,21 @@ export default function TicketDetailsPage() {
     if (editData.assigned_to) {
       formData.append("assigned_to", editData.assigned_to);
     }
+    if (editData.attachments && editData.attachments.length > 0) {
+      editData.attachments.forEach((file, index) => {
+        formData.append(`attachment_${index}`, file);
+      });
+    }
+    if (deletedAttachments.length > 0) {
+      deletedAttachments.forEach((id) => {
+        formData.append("delete_attachment_ids", id);
+      });
+    }
 
-    // Add new attachments
-    editData.attachments?.forEach((file) => {
-      formData.append("attachments", file);
+    fetcher.submit(formData, {
+      method: "POST",
+      encType: "multipart/form-data",
     });
-
-    submit(formData, { method: "POST" });
   };
 
   const handleStatusUpdate = (status: TicketStatus) => {
@@ -1115,12 +1185,10 @@ export default function TicketDetailsPage() {
   };
 
   const handleDeleteAttachment = (attachmentId: string) => {
-    if (window.confirm("Are you sure you want to delete this attachment?")) {
-      const formData = new FormData();
-      formData.append("actionType", "deleteAttachment");
-      formData.append("attachmentId", attachmentId);
-      submit(formData, { method: "POST" });
-    }
+    const formData = new FormData();
+    formData.append("actionType", "deleteAttachment");
+    formData.append("attachmentId", attachmentId);
+    submit(formData, { method: "POST" });
   };
 
   const handleFileUpload = (files: File[]) => {
@@ -1137,13 +1205,22 @@ export default function TicketDetailsPage() {
     }));
   };
 
-  // Effects
   useEffect(() => {
-    if (actionData?.success) {
-      setNewComment("");
-      setIsEditing(false);
+    if (actionData?.success && actionData?.message) {
+      if (
+        actionData.message.includes("deleted") ||
+        actionData.message.includes("status updated")
+      ) {
+        success("Success", actionData.message);
+      }
+      if (actionData.message.includes("Comment added")) {
+        setNewComment("");
+        setIsEditing(false);
+      }
+    } else if (actionData?.success === false && actionData?.error) {
+      error("Error", actionData.error);
     }
-  }, [actionData]);
+  }, [actionData, success, error]);
 
   useEffect(() => {
     const changed =
@@ -1151,19 +1228,29 @@ export default function TicketDetailsPage() {
       editData.description !== ticket.description ||
       editData.priority !== ticket.priority ||
       editData.assigned_to !== ticket.assigned_to ||
-      (editData.attachments?.length ?? 0) > 0;
+      (editData.attachments?.length ?? 0) > 0 ||
+      (deletedAttachments?.length ?? 0) > 0;
 
     setHasChanges(changed);
-  }, [editData, ticket]);
+  }, [editData, ticket, deletedAttachments]);
 
   useEffect(() => {
-    if (actionData?.success) {
-      success(actionData.message);
+    if (fetcher.data?.success) {
+      success(fetcher.data.message);
       setIsEditing(false);
-    } else if (actionData?.success === false) {
-      error(actionData.message);
+
+      setEditData({
+        title: ticket.title,
+        description: ticket.description,
+        priority: ticket.priority,
+        assigned_to: ticket.assigned_to || undefined,
+        attachments: [],
+      });
+      setDeletedAttachments([]);
+    } else if (fetcher.data?.success === false) {
+      error(fetcher.data.message);
     }
-  }, [actionData]);
+  }, [fetcher.data]);
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -1171,6 +1258,7 @@ export default function TicketDetailsPage() {
         ticket={ticket}
         isEditing={isEditing}
         canEdit={canEdit}
+        isSaving={isSaving}
         isSubmitting={isSubmitting}
         hasChanges={hasChanges}
         onEdit={() => setIsEditing(true)}
@@ -1182,9 +1270,9 @@ export default function TicketDetailsPage() {
       />
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6 items-start">
         {/* Main Content - Takes up 3 columns */}
-        <div className="xl:col-span-3 space-y-6">
+        <div className="xl:col-span-3 flex flex-col gap-6 min-h-[60vh]">
           {/* Ticket Description */}
           <Card>
             <CardHeader>
@@ -1198,13 +1286,17 @@ export default function TicketDetailsPage() {
                   editData={editData}
                   assignableUsers={assignableUsers || []}
                   canAssign={canAssign}
-                  existingAttachments={existingAttachments}
+                  existingAttachments={existingAttachments.filter(
+                    (a) => !deletedAttachments.includes(a.id)
+                  )}
                   onChange={(updates) =>
                     setEditData((prev) => ({ ...prev, ...updates }))
                   }
                   onFileUpload={handleFileUpload}
                   onRemoveFile={handleRemoveFile}
-                  onDeleteAttachment={handleDeleteAttachment}
+                  onDeleteAttachment={(attachmentId) => {
+                    setDeletedAttachments((prev) => [...prev, attachmentId]);
+                  }}
                 />
               ) : (
                 <div className="space-y-6">
@@ -1221,6 +1313,7 @@ export default function TicketDetailsPage() {
           </Card>
 
           {/* Comments Section */}
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
@@ -1280,66 +1373,67 @@ export default function TicketDetailsPage() {
                   ))
                 )}
               </div>
-
-              {/* Add Comment Form */}
-              <div className="border-t pt-6">
-                <form onSubmit={handleAddComment} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="new-comment">Add Comment</Label>
-                    <Textarea
-                      id="new-comment"
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      placeholder="Write your comment..."
-                      rows={3}
-                    />
-                  </div>
-
-                  {canEdit && (
-                    <div className="flex items-center space-x-4">
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="radio"
-                          id="comment"
-                          name="commentType"
-                          value="comment"
-                          checked={commentType === "comment"}
-                          onChange={(e) =>
-                            setCommentType(e.target.value as CommentType)
-                          }
-                        />
-                        <Label htmlFor="comment">Public Comment</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="radio"
-                          id="internal_note"
-                          name="commentType"
-                          value="internal_note"
-                          checked={commentType === "internal_note"}
-                          onChange={(e) =>
-                            setCommentType(e.target.value as CommentType)
-                          }
-                        />
-                        <Label htmlFor="internal_note">Internal Note</Label>
-                      </div>
+              {/* Add Comment Form */}{" "}
+              {ticket.status !== "closed" && (
+                <div className="border-t pt-6">
+                  <form onSubmit={handleAddComment} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="new-comment">Add Comment</Label>
+                      <Textarea
+                        id="new-comment"
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        placeholder="Write your comment..."
+                        rows={3}
+                      />
                     </div>
-                  )}
 
-                  <Button
-                    type="submit"
-                    disabled={!newComment.trim() || isSubmitting}
-                  >
-                    {isSubmitting ? "Adding..." : "Add Comment"}
-                  </Button>
-                </form>
-              </div>
+                    {canEdit && (
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="radio"
+                            id="comment"
+                            name="commentType"
+                            value="comment"
+                            checked={commentType === "comment"}
+                            onChange={(e) =>
+                              setCommentType(e.target.value as CommentType)
+                            }
+                          />
+                          <Label htmlFor="comment">Public Comment</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="radio"
+                            id="internal_note"
+                            name="commentType"
+                            value="internal_note"
+                            checked={commentType === "internal_note"}
+                            onChange={(e) =>
+                              setCommentType(e.target.value as CommentType)
+                            }
+                          />
+                          <Label htmlFor="internal_note">Internal Note</Label>
+                        </div>
+                      </div>
+                    )}
+
+                    <Button
+                      type="submit"
+                      disabled={!newComment.trim() || isSubmitting}
+                    >
+                      {isSubmitting ? "Adding..." : "Add Comment"}
+                    </Button>
+                  </form>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
         {/* Sidebar - Takes up 1 column */}
-        <div className="xl:col-span-2 space-y-6">
+        <div className="xl:col-span-2 flex flex-col gap-6 sticky top-24 self-start">
           {/* Ticket Information */}
           <Card>
             <CardHeader>
@@ -1404,7 +1498,11 @@ export default function TicketDetailsPage() {
                       >
                         {/* Image Preview */}
                         {isImage && fileUrl && (
-                          <div className="w-full h-32 bg-muted flex items-center justify-center overflow-hidden">
+                          <div
+                            className="w-full h-32 bg-muted flex items-center justify-center overflow-hidden"
+                            onClick={() => setPreviewAttachment(attachment)}
+                            title="Preview image"
+                          >
                             <img
                               src={fileUrl}
                               alt={attachment.file_name}
@@ -1457,7 +1555,10 @@ export default function TicketDetailsPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() =>
-                                  handleDeleteAttachment(attachment.id)
+                                  setConfirmDialog({
+                                    open: true,
+                                    attachmentId: attachment.id,
+                                  })
                                 }
                                 className="flex-shrink-0 text-destructive hover:text-destructive"
                                 title="Delete attachment"
@@ -1477,6 +1578,55 @@ export default function TicketDetailsPage() {
         </div>
       </div>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title="Delete Attachment?"
+        description="Are you sure you want to delete this attachment?"
+        confirmText="Delete"
+        cancelText="Cancel"
+        destructive
+        onConfirm={() => {
+          if (confirmDialog.attachmentId) {
+            handleDeleteAttachment(confirmDialog.attachmentId);
+          }
+          setConfirmDialog({ open: false, attachmentId: null });
+        }}
+        onCancel={() => setConfirmDialog({ open: false, attachmentId: null })}
+      />
+      {previewAttachment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl p-6 max-w-2xl w-full relative">
+            <button
+              className="absolute top-2 right-2 text-gray-500 hover:text-gray-900 dark:hover:text-white"
+              onClick={() => setPreviewAttachment(null)}
+              aria-label="Close preview"
+            >
+              <XIcon className="w-6 h-6" />
+            </button>
+            <div className="flex flex-col items-center">
+              <h2 className="mb-4 text-lg font-semibold">
+                {previewAttachment.file_name}
+              </h2>
+              {isImageFileByName(previewAttachment.file_name) ? (
+                <img
+                  src={previewAttachment.url}
+                  alt={previewAttachment.file_name}
+                  className="max-w-full max-h-[60vh] rounded"
+                />
+              ) : (
+                <div className="text-center">
+                  <span className="text-4xl">
+                    {getFileIcon(previewAttachment.file_name)}
+                  </span>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    No preview available
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

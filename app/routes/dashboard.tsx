@@ -705,7 +705,7 @@ export default function UnifiedDashboard({ loaderData }: Route.ComponentProps) {
         key: "closed",
         label: "Closed",
         icon: CheckCircle,
-        color: "text-green-600",
+        color: "text-gray-600",
       },
     ];
 

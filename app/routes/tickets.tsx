@@ -69,7 +69,7 @@ const STATS_CONFIG = [
   { key: "in_progress", label: "In Progress", color: "text-yellow-600" },
   { key: "resolved", label: "Resolved", color: "text-purple-600" },
   { key: "reopened", label: "Reopened", color: "text-orange-600" },
-  { key: "closed", label: "Closed", color: "text-green-600" },
+  { key: "closed", label: "Closed", color: "text-gray-600" },
 ] as const;
 
 // Utility functions

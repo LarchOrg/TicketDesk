@@ -266,13 +266,6 @@ function ProfileHeader({ user, profile }: { user: any; profile: any }) {
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-2 lg:ml-auto">
-            <Button variant="outline" size="sm" className="shadow-sm">
-              <Edit3 className="w-4 h-4 mr-2" />
-              Edit Profile
-            </Button>
-          </div>
         </div>
       </CardContent>
     </Card>

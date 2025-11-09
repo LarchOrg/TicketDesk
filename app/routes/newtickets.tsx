@@ -132,7 +132,6 @@ export async function action({ request }: Route.ActionArgs) {
 
     // Create the ticket
     const result = await services.tickets.createTicket(ticketData);
-    console.log(result);
 
     if (!result.success || !result.ticket || !result.ticketId) {
       return Response.json(

@@ -15,7 +15,7 @@ const statusStyles = {
   reopened:
     "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-700/50",
   closed:
-    "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-700/50",
+    "bg-gray-200 dark:bg-gray-900/100 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700/50",
 };
 
 export default function StatusBadge({
