@@ -49,47 +49,18 @@ export function TicketListSkeleton() {
 // Loading skeleton for ticket details
 export function TicketDetailsSkeleton() {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-6">
-        <Card className="animate-pulse">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="h-6 bg-muted rounded w-32"></div>
-              <div className="flex gap-2">
-                <div className="h-6 bg-muted rounded w-16"></div>
-                <div className="h-6 bg-muted rounded w-16"></div>
-              </div>
+    <div className="flex justify-center items-center min-h-[60vh]">
+      <div className="w-full max-w-md space-y-6 animate-pulse">
+
+        <div className="space-y-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="space-y-2">
+              <div className="h-6 bg-muted rounded w-full"></div>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="h-4 bg-muted rounded w-20"></div>
-            <div className="space-y-2">
-              <div className="h-4 bg-muted rounded w-full"></div>
-              <div className="h-4 bg-muted rounded w-3/4"></div>
-              <div className="h-4 bg-muted rounded w-1/2"></div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-4 bg-muted rounded"></div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      <div className="space-y-6">
-        <Card className="animate-pulse">
-          <CardHeader>
-            <div className="h-6 bg-muted rounded w-32"></div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex justify-between">
-                <div className="h-4 bg-muted rounded w-20"></div>
-                <div className="h-4 bg-muted rounded w-16"></div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+          ))}
+        </div>
+
+
       </div>
     </div>
   );

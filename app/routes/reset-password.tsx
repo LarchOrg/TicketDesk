@@ -306,7 +306,7 @@ function useResetPassword() {
 
       // Sign out the user and redirect to login after a delay
       setTimeout(async () => {
-        await supabase.auth.signOut();
+        supabase.auth.signOut();
         navigate("/login");
       }, 2000);
     } catch (err: any) {

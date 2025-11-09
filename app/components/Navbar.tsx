@@ -65,7 +65,7 @@ export function Navbar({
   const handleSignOut = async () => {
     setSigningOut(true);
     try {
-      await signOut();
+      signOut();
       navigate("/login");
     } catch (error) {
       console.error("Sign out error:", error);
