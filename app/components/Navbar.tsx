@@ -82,6 +82,7 @@ export function Navbar({
   // Check if user can access admin features
   const userRole = profile?.role as "admin" | "agent" | "user" | undefined;
   const canAccessAdmin = userRole && ROLE_PERMISSIONS[userRole]?.canManageUsers;
+  const logoSrc = darkMode === true ? "/dark_larch.jpg" : "/larch.png";
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-border bg-card">
@@ -90,6 +91,11 @@ export function Navbar({
           {/* Left Section - Logo, Menu Toggle, and Page Title */}
           <div className="flex items-center gap-4">
             {/* Mobile menu toggle */}
+            <img
+              src={logoSrc}
+              alt="HelpDesk Logo"
+              className="w-14 h-14 object-contain lg:hidden"
+            />
             <Button
               variant="ghost"
               size="sm"
@@ -103,7 +109,6 @@ export function Navbar({
                 <Menu className="h-5 w-5" />
               )}
             </Button>
-
             {/* Page Title */}
             <div className="hidden md:flex items-center gap-4 ml-3 border-border">
               <h1 className="text-lg font-semibold text-foreground">

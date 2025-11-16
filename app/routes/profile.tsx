@@ -12,7 +12,7 @@ import {
   Shield,
   UserCheck,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
@@ -466,7 +466,7 @@ function PasswordChangeForm({
 
 // Custom hooks
 function useProfileForm() {
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [formData, setFormData] = useState<ProfileFormData>({
     name: "",
     email: "",
@@ -480,22 +480,25 @@ function useProfileForm() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Initialize form data when profile loads
   useEffect(() => {
     if (profile && user) {
       const data = { name: profile.name || "", email: user.email || "" };
       setFormData(data);
-      setInitialData(data); // store original snapshot
+      setInitialData(data);
       setHasChanges(false);
     }
   }, [profile, user]);
 
-  useEffect(() => {
+  const checkForChanges = useCallback(() => {
     const changed =
       formData.name.trim() !== initialData.name.trim() ||
       formData.email.trim() !== initialData.email.trim();
     setHasChanges(changed);
-  }, [formData, initialData]);
+  }, [formData.name, formData.email, initialData.name, initialData.email]);
+
+  useEffect(() => {
+    checkForChanges();
+  }, [checkForChanges]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -509,11 +512,11 @@ function useProfileForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hasChanges) return;
+    if (!hasChanges || loading) return;
+
     setError("");
     setSuccess("");
 
-    // Validation
     const nameError = validateName(formData.name);
     if (nameError) {
       setError(nameError);
@@ -523,11 +526,12 @@ function useProfileForm() {
     setLoading(true);
 
     try {
-      // Update profile in database (only name, email is read-only)
+      const trimmedName = formData.name.trim();
+      
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
-          name: formData.name.trim(),
+          name: trimmedName,
           updated_at: new Date().toISOString(),
         })
         .eq("id", user?.id);
@@ -536,9 +540,19 @@ function useProfileForm() {
         throw updateError;
       }
 
-      setSuccess("Profile updated successfully!");
-      setInitialData(formData);
+      const updatedData = { ...formData, name: trimmedName };
+      setInitialData(updatedData);
+      setFormData(updatedData);
       setHasChanges(false);
+      
+      if (refreshProfile) {
+        await refreshProfile();
+      }
+
+      setSuccess("Profile updated successfully!");
+      
+      setTimeout(() => setSuccess(""), 3000);
+
     } catch (err: any) {
       console.error("Profile update error:", err);
       setError(err.message || "Failed to update profile");

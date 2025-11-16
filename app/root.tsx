@@ -5,7 +5,6 @@ import {
   Meta,
   Outlet,
   Scripts,
-  ScrollRestoration,
   useLocation,
   useNavigate,
 } from "react-router";
@@ -24,15 +23,16 @@ function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Check if current page is an auth page (login/signup/forgot-password/reset-password)
-  const isAuthPage = /^\/(login|signup|forgot-password|reset-password)(\/|$)/.test(location.pathname);
+  const isAuthPage =
+    /^\/(login|signup|forgot-password|reset-password)(\/|$)/.test(
+      location.pathname
+    );
 
   const handleCreateTicket = useCallback(
     () => navigate("/newtickets"),
     [navigate]
   );
 
-  // Redirect to login if not authenticated and not on auth page
   useEffect(() => {
     if (!loading && !user && !isAuthPage) {
       console.log("🔒 Not authenticated, redirecting to login");
@@ -40,12 +40,8 @@ function AppLayout() {
     }
   }, [loading, user, isAuthPage, navigate]);
 
-  // Instead of early returns after hooks, use conditional rendering
-  let content: React.ReactNode = null;
-
-  // Show loading state while checking authentication
   if (loading) {
-    content = (
+    return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
@@ -53,78 +49,75 @@ function AppLayout() {
         </div>
       </div>
     );
-  } else if (isAuthPage) {
-    // If on auth page, just render the outlet without layout
-    content = (
+  }
+
+  if (isAuthPage) {
+    return (
       <div className="min-h-screen bg-background">
         <Outlet />
       </div>
     );
-  } else if (!user) {
-    // If not authenticated, render nothing (useEffect will redirect)
-    content = null;
-  } else {
-    // Main authenticated layout
-    content = (
-      <div className="min-h-screen bg-background">
-        <div className="flex h-screen">
-          {/* Desktop Sidebar */}
-          <div
-            className={`${
-              sidebarOpen ? "w-72" : "w-16"
-            } transition-all duration-300 ease-in-out flex-shrink-0 hidden lg:block`}
-          >
-            <div className="h-full">
-              <Sidebar collapsed={!sidebarOpen} />
-            </div>
-          </div>
+  }
 
-          {/* Mobile Sidebar */}
-          <div
-            className={`fixed inset-y-0 left-0 z-50 w-72 transform transition-transform duration-300 ease-in-out lg:hidden ${
-              sidebarOpen ? "translate-x-0" : "-translate-x-full"
-            }`}
-          >
-            <div className="h-full bg-card shadow-xl">
-              <Sidebar collapsed={false} />
-            </div>
-          </div>
+  if (!user) {
+    return null;
+  }
+  const logoSrc = darkMode === true ? "/dark_larch.jpg" : "/larch.png";
 
-          {/* Main Content Area */}
-          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-            {/* Navbar */}
-            <div className="flex-shrink-0">
-              <Navbar
-                darkMode={darkMode}
-                onToggleDarkMode={toggleDarkMode}
-                onCreateTicket={handleCreateTicket}
-                sidebarOpen={sidebarOpen}
-                onToggleSidebar={toggleSidebar}
-              />
-            </div>
-
-            {/* Main content */}
-            <main className="flex-1 overflow-auto bg-background">
-              <div className="max-w-full">
-                <Outlet />
-              </div>
-            </main>
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="flex h-screen">
+        <div
+          className={`${
+            sidebarOpen ? "w-72" : "w-16"
+          } transition-all duration-300 ease-in-out flex-shrink-0 hidden lg:block`}
+        >
+          <div className="h-full">
+            <Sidebar collapsed={!sidebarOpen} />
           </div>
         </div>
 
-        {/* Mobile sidebar overlay */}
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black/50 lg:hidden z-40"
-            onClick={toggleSidebar}
-          />
-        )}
-      </div>
-    );
-  }
+        <div
+          className={`fixed inset-y-0 left-0 z-50 w-72 transform transition-transform duration-300 ease-in-out lg:hidden ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <div className="h-full bg-card shadow-xl">
+            <Sidebar collapsed={false} />
+          </div>
+        </div>
 
-  // Return the computed content directly to avoid stray/duplicate JSX closures
-  return content;
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+          {/* Navbar */}
+          <div className="flex-shrink-0">
+            <Navbar
+              darkMode={darkMode}
+              onToggleDarkMode={toggleDarkMode}
+              onCreateTicket={handleCreateTicket}
+              sidebarOpen={sidebarOpen}
+              onToggleSidebar={toggleSidebar}
+            />
+          </div>
+
+          {/* Main content */}
+          <main className="flex-1 overflow-auto bg-background">
+            <div className="max-w-full">
+              <Outlet />
+            </div>
+          </main>
+        </div>
+      </div>
+
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 lg:hidden z-40"
+          onClick={toggleSidebar}
+        />
+      )}
+    </div>
+  );
 }
 
 export const links: Route.LinksFunction = () => [
@@ -140,6 +133,14 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
+export function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -151,7 +152,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
-        <ScrollRestoration />
         <Scripts />
       </body>
     </html>
@@ -162,6 +162,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <SidebarProvider>
+        <ScrollToTop />
         <AuthProvider>
           <AppLayout />
         </AuthProvider>
@@ -179,10 +180,8 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   let details = "An unexpected error occurred.";
   let stack: string | undefined;
   let statusCode: number | undefined;
-  console.log(stack, "stack");
 
   if (isRouteErrorResponse(error)) {
-    console.log(error, "error");
     statusCode = error.status;
     message = error.status === 404 ? "Page Not Found" : `Error ${error.status}`;
     details =
@@ -190,7 +189,6 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
         ? "The page you're looking for doesn't exist."
         : error.statusText || details;
   } else if (import.meta.env.DEV && error && error instanceof Error) {
-    console.log(error, "WRRR");
     details = error.message;
     stack = error.stack;
   }
@@ -267,12 +265,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     </div>
   );
 
-  // If on auth page, render error without layout
   if (isAuthPage) {
     return errorContent;
   }
 
-  // For authenticated pages, wrap with providers so navigation works properly
   return (
     <ThemeProvider>
       <SidebarProvider>

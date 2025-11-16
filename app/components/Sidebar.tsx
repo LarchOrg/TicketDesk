@@ -94,7 +94,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
               <img
                 src={logoSrc}
                 alt="HelpDesk Logo"
-                className="w-12 h-12 object-contain"
+                className="w-14 h-14 object-contain"
               />
             </div>
           </button>
@@ -105,7 +105,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
               <img
                 src={logoSrc}
                 alt="HelpDesk Logo"
-                className="w-12 h-12 object-contain"
+                className="w-14 h-14 object-contain"
               />
             </div>
 

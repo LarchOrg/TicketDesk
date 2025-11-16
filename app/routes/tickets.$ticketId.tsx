@@ -1098,7 +1098,6 @@ function TicketEditForm({
   );
 }
 
-// Main component
 export default function TicketDetailsPage() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -1106,14 +1105,14 @@ export default function TicketDetailsPage() {
   const { user, profile } = auth;
   const submit = useSubmit();
   const navigation = useNavigation();
-  const fetcher = useFetcher();
-  const isSaving = fetcher.state === "submitting";
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(
     null
   );
   const { ticket, comments, attachments, assignableUsers } = loaderData;
-  const isSubmitting = navigation.state === "submitting";
   const { toasts, removeToast, success, error } = useToast();
+  
+  const editFetcher = useFetcher();
+  
   const [hasChanges, setHasChanges] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<EditTicketData>({
@@ -1141,6 +1140,54 @@ export default function TicketDetailsPage() {
     attachmentId: string | null;
   }>({ open: false, attachmentId: null });
 
+  const isPageLoading = navigation.state === "loading" && 
+    navigation.location && 
+    !navigation.formData;
+  
+  const isSubmitting = navigation.state === "submitting";
+  const isSaving = editFetcher.state === "submitting";
+
+  const [lastActionData, setLastActionData] = useState<any>(null);
+  const [lastEditData, setLastEditData] = useState<any>(null);
+
+  useEffect(() => {
+    if (actionData && actionData !== lastActionData) {
+      setLastActionData(actionData);
+      
+      if (actionData.success) {
+        success("Success", actionData.message);
+        
+        if (actionData.message.includes("Comment added")) {
+          setNewComment("");
+        }
+      } else if (actionData.error) {
+        error("Error", actionData.error);
+      }
+    }
+  }, [actionData]);
+
+  useEffect(() => {
+    if (editFetcher.data && editFetcher.data !== lastEditData) {
+      setLastEditData(editFetcher.data);
+      
+      if (editFetcher.data.success) {
+        success("Success", editFetcher.data.message);
+        setIsEditing(false);
+        setEditData({
+          title: ticket.title,
+          description: ticket.description,
+          priority: ticket.priority,
+          assigned_to: ticket.assigned_to || undefined,
+          attachments: [],
+          delete_attachment_ids: [],
+        });
+        setDeletedAttachments([]);
+      } else if (editFetcher.data.error) {
+        error("Error", editFetcher.data.error);
+      }
+    }
+  }, [editFetcher.data]); 
+
   const handleSaveTicket = async () => {
     const formData = new FormData();
     formData.append("actionType", "updateTicket");
@@ -1161,7 +1208,7 @@ export default function TicketDetailsPage() {
       });
     }
 
-    fetcher.submit(formData, {
+    editFetcher.submit(formData, {
       method: "POST",
       encType: "multipart/form-data",
     });
@@ -1207,23 +1254,6 @@ export default function TicketDetailsPage() {
   };
 
   useEffect(() => {
-    if (actionData?.success && actionData?.message) {
-      if (
-        actionData.message.includes("deleted") ||
-        actionData.message.includes("status updated")
-      ) {
-        success("Success", actionData.message);
-      }
-      if (actionData.message.includes("Comment added")) {
-        setNewComment("");
-        setIsEditing(false);
-      }
-    } else if (actionData?.success === false && actionData?.error) {
-      error("Error", actionData.error);
-    }
-  }, [actionData, success, error]);
-
-  useEffect(() => {
     const changed =
       editData.title !== ticket.title ||
       editData.description !== ticket.description ||
@@ -1235,26 +1265,7 @@ export default function TicketDetailsPage() {
     setHasChanges(changed);
   }, [editData, ticket, deletedAttachments]);
 
-  useEffect(() => {
-    if (fetcher.data?.success) {
-      success(fetcher.data.message);
-      setIsEditing(false);
-
-      setEditData({
-        title: ticket.title,
-        description: ticket.description,
-        priority: ticket.priority,
-        assigned_to: ticket.assigned_to || undefined,
-        attachments: [],
-      });
-      setDeletedAttachments([]);
-    } else if (fetcher.data?.success === false) {
-      error(fetcher.data.message);
-    }
-  }, [fetcher.data]);
-
-  const isLoading = navigation.state === "loading";
-  if (isLoading) {
+  if (isPageLoading) {
     return <TicketDetailsSkeleton />;
   }
   return (
