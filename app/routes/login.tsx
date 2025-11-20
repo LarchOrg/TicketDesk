@@ -71,7 +71,7 @@ function getRedirectPath(role: string): string {
 // Meta function
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Login - HelpDesk" },
+    { title: "Larch HelpDesk" },
     { name: "description", content: "Sign in to your HelpDesk account" },
   ];
 }

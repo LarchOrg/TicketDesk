@@ -87,7 +87,7 @@ function validatePasswordConfirmation(
 // Meta function
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Profile - HelpDesk" },
+    { title: "Larch HelpDesk" },
     {
       name: "description",
       content: "Manage your profile and account settings",

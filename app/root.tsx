@@ -62,7 +62,6 @@ function AppLayout() {
   if (!user) {
     return null;
   }
-  const logoSrc = darkMode === true ? "/dark_larch.jpg" : "/larch.png";
 
   return (
     <div className="min-h-screen bg-background">
@@ -147,6 +146,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" href="/ERPIcon.ico" />
         <Meta />
         <Links />
       </head>

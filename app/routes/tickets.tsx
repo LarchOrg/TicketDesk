@@ -108,7 +108,7 @@ function createEmptyStats(): TicketStats {
 // Meta function
 export const meta = () => {
   return [
-    { title: "Ticket Queue - Support Portal" },
+    { title: "Larch HelpDesk" },
     { name: "description", content: "Manage and view all support tickets" },
   ];
 };

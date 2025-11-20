@@ -236,7 +236,7 @@ export async function action({
 
 export const meta = () => {
   return [
-    { title: "User Management - Admin Portal" },
+    { title: "Larch HelpDesk" },
     { name: "description", content: "Manage users and their roles" },
   ];
 };

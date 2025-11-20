@@ -38,7 +38,7 @@ function validateEmail(email: string): string | null {
 // Meta function
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Forgot Password - HelpDesk" },
+    { title: "Larch HelpDesk" },
     { name: "description", content: "Reset your HelpDesk account password" },
   ];
 }

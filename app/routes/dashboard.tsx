@@ -239,7 +239,7 @@ export const meta = ({ data }: { data: UnifiedDashboardLoaderData }) => {
   };
 
   return [
-    { title: `${roleTitle[data?.role || "user"]} - Support Portal` },
+    { title: `Larch HelpDesk` },
     {
       name: "description",
       content: `${data?.role || "user"} dashboard for the support system`,

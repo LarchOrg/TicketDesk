@@ -178,7 +178,7 @@ export async function action({
 
 export const meta = () => {
   return [
-    { title: "System Settings - Admin Portal" },
+    { title: "Larch HelpDesk" },
     { name: "description", content: "Configure system-wide settings" },
   ];
 };

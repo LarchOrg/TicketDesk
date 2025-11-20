@@ -94,7 +94,7 @@ export async function loader({
 
 export const meta = () => {
   return [
-    { title: "My Dashboard - Support Portal" },
+    { title: "Larch HelpDesk" },
     {
       name: "description",
       content: "View your submitted tickets and support requests",

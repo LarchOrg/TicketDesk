@@ -112,7 +112,7 @@ function validateSignupForm(formData: SignupFormData): ValidationErrors {
 // Meta function
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Sign Up - HelpDesk" },
+    { title: "Larch HelpDesk" },
     { name: "description", content: "Create your HelpDesk account" },
   ];
 }

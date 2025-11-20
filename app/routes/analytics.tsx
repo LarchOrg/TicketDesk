@@ -392,7 +392,7 @@ function determineActivityType(
 // Meta function
 export function meta() {
   return [
-    { title: "Analytics - HelpDesk" },
+    { title: "Larch HelpDesk" },
     {
       name: "description",
       content: "View detailed analytics and reports for your helpdesk tickets",

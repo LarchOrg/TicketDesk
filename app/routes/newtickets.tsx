@@ -45,7 +45,7 @@ function parseFormData(formData: FormData): CreateTicketData {
 // Meta function
 export const meta = () => {
   return [
-    { title: "Create New Ticket - HelpDesk" },
+    { title: "Larch HelpDesk" },
     { name: "description", content: "Submit a new support ticket" },
   ];
 };

@@ -65,7 +65,7 @@ function validateResetForm(formData: ResetPasswordFormData): string | null {
 // Meta function
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Reset Password - HelpDesk" },
+    { title: "Larch HelpDesk" },
     {
       name: "description",
       content: "Create a new password for your HelpDesk account",

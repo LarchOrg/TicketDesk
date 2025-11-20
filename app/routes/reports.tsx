@@ -186,7 +186,7 @@ export async function loader({
 
 export const meta = () => {
   return [
-    { title: "Reports & Analytics - Support Portal" },
+    { title: "Larch HelpDesk" },
     {
       name: "description",
       content: "View ticket statistics and performance metrics",
