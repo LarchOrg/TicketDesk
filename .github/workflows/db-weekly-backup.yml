@@ -2,7 +2,7 @@ name: Supabase Weekly Backup
 
 on:
   schedule:
-    - cron: "0 18 * * 0" 
+    - cron: "0 18 * * 0" # Weekly Sunday at 11:30 PM IST (18:00 UTC)
   workflow_dispatch:
 
 jobs:
@@ -19,10 +19,11 @@ jobs:
       - name: Dump Supabase Database
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: pg_dump $SUPABASE_DB_URL > backups/backup_$(date +"%Y-%m-%d_%H-%M-%S").sql
+        run: pg_dump $SUPABASE_DB_URL > backups/db_backup_$(date +"%Y-%m-%d_%H-%M-%S").sql
 
       - name: Upload backup artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: supabase-weekly-backup
           path: backups/
+          compression-level: 0  # Faster upload
