@@ -1,0 +1,28 @@
+name: Supabase Weekly Backup
+
+on:
+  schedule:
+    - cron: "0 18 * * 0" 
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Postgres client
+        run: sudo apt-get update && sudo apt-get install -y postgresql
+
+      - name: Create backup folder
+        run: mkdir -p backups
+
+      - name: Dump Supabase Database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: pg_dump $SUPABASE_DB_URL > backups/backup_$(date +"%Y-%m-%d_%H-%M-%S").sql
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: supabase-weekly-backup
+          path: backups/

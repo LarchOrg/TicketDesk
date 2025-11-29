@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { redirect, useSubmit } from "react-router";
-import type { Route } from "../+types/admin/settings";
 import { Button } from "../../components/ui/button";
 import {
   Card,
@@ -35,6 +34,7 @@ import {
 } from "../../components/ui/tabs";
 import { Textarea } from "../../components/ui/textarea";
 import { createSupabaseServerClient } from "../../lib/supabase-server";
+import type { Route } from "./+types/settings";
 
 interface SystemSettings {
   siteName: string;
