@@ -1,4 +1,4 @@
-name: Supabase Weekly Backup
+name: Supabase DB Backup
 
 on:
   schedule:
@@ -10,30 +10,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Login to Supabase
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: |
-          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+    - name: Set up Supabase CLI
+      uses: supabase/setup-cli@v2
 
-      - name: Create backup folder
-        run: mkdir -p backups
+    - name: Link Supabase project
+      run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+      env:
+        SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-      - name: Export database backup
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase db dump \
-              --schema public --schema auth --schema storage \
-              --data \
-              -f backups/full_backup_$(date +"%Y-%m-%d_%H-%M-%S").sql
+    - name: Create backup directory
+      run: mkdir -p backups
 
-      - name: Upload backup artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: supabase-db-backup
-          path: backups/
+    - name: Dump DB schema + data
+      run: |
+        supabase db dump \
+          --schema public --schema auth --schema storage \
+          --data \
+          -f backups/db_backup_$(date +"%Y-%m-%d_%H-%M-%S").sql
+      env:
+        SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+    - name: Upload backup artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: supabase-db-backup
+        path: backups/
+        if-no-files-found: error
