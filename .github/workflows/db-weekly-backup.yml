@@ -25,6 +25,8 @@ jobs:
         run: mkdir -p backups
 
       - name: Export database backup
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: supabase db dump -f backups/db_backup_$(date +"%Y-%m-%d_%H-%M-%S").sql
 
       - name: Upload backup artifact
