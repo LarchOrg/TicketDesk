@@ -11,8 +11,9 @@ jobs:
 
     steps:
       - name: Install Supabase CLI
-        run: |
-          curl -sSfL https://get.supabase.com/cli/install | sh -s -- -b /usr/local/bin
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
 
       - name: Login to Supabase
         env:
