@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Install Supabase CLI
         run: |
-        curl -sSfL https://get.supabase.com/cli/install | sh -s -- -b /usr/local/bin
+          curl -sSfL https://get.supabase.com/cli/install | sh -s -- -b /usr/local/bin
 
       - name: Login to Supabase
         env:
