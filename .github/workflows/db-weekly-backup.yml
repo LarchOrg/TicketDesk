@@ -12,8 +12,7 @@ jobs:
     steps:
       - name: Install Supabase CLI
         run: |
-          wget -qO- https://get.supabase.com/cli/linux_x86_64.tar.gz | tar xvz
-          sudo mv supabase /usr/local/bin/supabase
+          curl -sSfL https://get.supabase.com/cli/install | sh -s -- -b /usr/local/bin
 
       - name: Login to Supabase
         env:
@@ -21,11 +20,14 @@ jobs:
         run: |
           supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
 
+      - name: Create backup folder
+        run: mkdir -p backups
+
       - name: Export database backup
-        run: supabase db dump
+        run: supabase db dump -f backups/db_backup_$(date +"%Y-%m-%d_%H-%M-%S").sql
 
       - name: Store backup
         uses: actions/upload-artifact@v4
         with:
           name: supabase-db-backup
-          path: supabase/migrations
+          path: backups/
