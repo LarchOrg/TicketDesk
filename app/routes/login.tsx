@@ -293,7 +293,12 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-md">
           <Card>
-            <CardHeader className="text-center">
+            <CardHeader className="items-center text-center">
+              <img
+                src='./ERPIcon.ico'
+                alt="HelpDesk Logo"
+                className="w-14 h-14 object-contain items-center mx-auto"
+              />
               <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
               <CardDescription>
                 Sign in to your account to continue
