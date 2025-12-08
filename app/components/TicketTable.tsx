@@ -88,7 +88,7 @@ export default function TicketTable({
       sortable: true,
       render: (value) => (
         <span className="font-mono text-xs text-muted-foreground">
-          #{getShortId(value)}
+            #{value.slice(-8)}
         </span>
       ),
     },

@@ -117,13 +117,20 @@ export async function loader({
           icon: "user",
         }));
 
-        const recentActivity = [...(ticketActivity || []), ...userActivity]
-          .sort(
-            (a, b) =>
-              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          )
-          .slice(0, 15);
+        const toIST = (timestamp: string) => {
+          let date = new Date(timestamp);
+          if (!timestamp.includes("Z") && !timestamp.includes("+")) {
+            date = new Date(timestamp + "Z"); 
+          }
 
+          return new Date(
+            date.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+          ).getTime();
+        };
+
+        const recentActivity = [...(ticketActivity || []), ...userActivity]
+          .sort((a, b) => toIST(b.timestamp) - toIST(a.timestamp))
+          .slice(0, 15);
         return {
           ...baseData,
           tickets: allTickets.tickets,
@@ -350,7 +357,11 @@ function TicketQueue({
                   </div>
                   <p className="text-xs text-muted-foreground">
                     #{ticket.id.slice(-8)} •{" "}
-                    {new Date(ticket.created_at).toLocaleDateString()}
+                    {new Date(ticket.created_at).toLocaleDateString()} • Created
+                    By:{" "}
+                    <span className="text-red-700 font-bold">
+                      {ticket.created_by_profile?.name || "Unknown"}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -518,10 +529,21 @@ function RecentActivity({ activities }: { activities: any[] }) {
   };
 
   const formatTimeAgo = (timestamp: string) => {
-    const now = new Date();
-    const activityTime = new Date(timestamp);
+    let date = new Date(timestamp);
+
+    // If timestamp has no timezone, assume UTC explicitly
+    if (!timestamp.includes("Z") && !timestamp.includes("+")) {
+      date = new Date(timestamp + "Z");
+    }
+
+    const toIST = (d: Date) =>
+      new Date(d.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+
+    const activityIST = toIST(date);
+    const nowIST = toIST(new Date());
+
     const diffInSeconds = Math.floor(
-      (now.getTime() - activityTime.getTime()) / 1000
+      (nowIST.getTime() - activityIST.getTime()) / 1000
     );
 
     if (diffInSeconds < 60) return "Just now";
@@ -530,8 +552,14 @@ function RecentActivity({ activities }: { activities: any[] }) {
       return `${Math.floor(diffInSeconds / 3600)}h ago`;
     if (diffInSeconds < 604800)
       return `${Math.floor(diffInSeconds / 86400)}d ago`;
-    return activityTime.toLocaleDateString();
+
+    return activityIST.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
   };
+
 
   return (
     <Card className="overflow-hidden shadow-md hover:shadow-lg transition-shadow">
@@ -552,7 +580,7 @@ function RecentActivity({ activities }: { activities: any[] }) {
                 key={activity.id}
                 className={`p-4 transition-all duration-200 ${
                   activity.ticketId ? "cursor-pointer hover:bg-accent/50" : ""
-                } ${index === 0 ? "bg-accent/20" : ""}`}
+                }`}
                 onClick={() => {
                   if (activity.ticketId) {
                     navigate(`/tickets/${activity.ticketId}`);

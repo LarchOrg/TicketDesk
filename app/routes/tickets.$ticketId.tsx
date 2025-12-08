@@ -23,6 +23,7 @@ import {
   useActionData,
   useFetcher,
   useLoaderData,
+  useNavigate,
   useNavigation,
   useSubmit,
 } from "react-router";
@@ -783,18 +784,21 @@ function TicketHeader({
   userRole: "admin" | "agent" | "user";
   userId: string;
 }) {
+  const navigate = useNavigate();
+
   return (
     <div className="bg-card border rounded-sm p-6 mb-6">
       {/* Navigation and Actions */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex gap-4 items-center mr-4">
-          <Link
-            to="/"
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
             className="cursor-pointer hover:bg-muted p-2 rounded-lg transition-colors"
-            title="Back to dashboard"
+            title="Back"
           >
             <ArrowLeft className="w-5 h-5" />
-          </Link>
+          </button>
           <h1 className="text-2xl font-bold text-foreground break-words">
             {ticket.title}
           </h1>
